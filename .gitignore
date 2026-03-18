@@ -1,0 +1,94 @@
+# ------------------------------
+# Python
+# ------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# ------------------------------
+# Virtual environments
+# ------------------------------
+.venv/
+venv/
+env/
+
+# ------------------------------
+# Environment variables
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# Django stuff
+# ------------------------------
+*.log
+db.sqlite3
+db.sqlite3-journal
+
+# Django media & static (optional)
+staticfiles/
+media/
+
+# ------------------------------
+# Migrations (keep or ignore carefully)
+# ------------------------------
+# If team project → KEEP migrations
+# If solo early stage → you can ignore
+# */migrations/*
+# !*/migrations/__init__.py
+
+# ------------------------------
+# IDE / Editor
+# ------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# Testing / coverage
+# ------------------------------
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ------------------------------
+# Logs
+# ------------------------------
+*.log
+
+# ------------------------------
+# uv / dependency manager
+# ------------------------------
+.uv/
+*.lock
+
+# ------------------------------
+# Model storage (VERY IMPORTANT)
+# ------------------------------
+storage/
+uploads/
+*.zip
+
+# ------------------------------
+# Temporary files
+# ------------------------------
+tmp/
+temp/
