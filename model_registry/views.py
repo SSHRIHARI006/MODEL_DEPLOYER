@@ -73,9 +73,24 @@ def upload_model(request):
                 raise Exception("Invalid YAML format")
 
         # Required fields
-        for field in ["name", "framework", "task"]:
-            if field not in config:
-                raise Exception(f"{field} missing in model.yaml")
+        # ---- MODEL SECTION ----
+            if "model" not in config:
+                raise Exception("model section missing")
+
+            for field in ["name", "framework", "task"]:
+                if field not in config["model"]:
+                    raise Exception(f"model.{field} missing")
+
+            # ---- RUNTIME SECTION ----
+            if "runtime" not in config:
+                raise Exception("runtime section missing")
+
+            if "entry_point" not in config["runtime"]:
+                raise Exception("runtime.entry_point missing")
+
+            # ---- ARTIFACTS (optional but recommended) ----
+            if "artifacts" not in config:
+                raise Exception("artifacts section missing")
 
         # Get user (temporary)
         user = User.objects.first()
@@ -85,9 +100,9 @@ def upload_model(request):
         # Create Model
         model = Model.objects.create(
             id=model_id,
-            name=config["name"],
-            framework=config["framework"],
-            task_type=config["task"],
+            name=config["model"]["name"],
+            framework=config["model"]["framework"],
+            task_type=config["model"]["task"],
             owner=user
         )
 
