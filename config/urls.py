@@ -22,4 +22,5 @@ urlpatterns = [
 
     path("", include("webapp.urls")),
     path("api/", include("prediction_gateway.urls")),
+    path("api/models/", include("model_registry.urls")),
 ]
