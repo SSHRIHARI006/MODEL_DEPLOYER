@@ -98,3 +98,7 @@ model.py
 pipeline.py
 schema.json
 model.pkl
+
+# Django migrations
+**/migrations/
+!**/migrations/__init__.py
