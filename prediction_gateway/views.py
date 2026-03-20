@@ -98,7 +98,18 @@ def run_inference(model_path, data):
 
     runtime = config["runtime"]
     artifacts = config.get("artifacts", {})
+    schema_path = os.path.join(model_path, "schema.json")
 
+    if os.path.exists(schema_path):
+        import jsonschema
+
+        with open(schema_path, "r") as f:
+            schema = json.load(f)
+
+        try:
+            jsonschema.validate(instance=data, schema=schema)
+        except Exception as e:
+            raise Exception(f"Invalid input: {str(e)}")
     entry_point = runtime.get("entry_point")
 
     if not entry_point:
@@ -138,7 +149,12 @@ def run_inference(model_path, data):
 
         obj = joblib.load(file_path)
 
-        return obj.predict([data]).tolist()
+        X = data.get("input")
+
+        if X is None:
+            raise Exception("Missing 'input' field")
+
+        return obj.predict([X]).tolist()
 
     # ---------------------------------------------------
     # CASE 3: model.pkl
@@ -153,7 +169,12 @@ def run_inference(model_path, data):
 
         obj = joblib.load(file_path)
 
-        return obj.predict([data]).tolist()
+        X = data.get("input")
+
+        if X is None:
+            raise Exception("Missing 'input' field")
+
+        return obj.predict([X]).tolist()
 
     # ---------------------------------------------------
     # INVALID ENTRY

@@ -92,3 +92,9 @@ uploads/
 # ------------------------------
 tmp/
 temp/
+
+model.yaml
+model.py
+pipeline.py
+schema.json
+model.pkl
