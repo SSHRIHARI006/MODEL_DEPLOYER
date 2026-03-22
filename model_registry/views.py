@@ -1,127 +1,125 @@
 import os
-import zipfile
-import uuid
-import yaml
 import shutil
+import uuid
+import zipfile
+from pathlib import Path
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+import yaml
 from django.conf import settings
+from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Model, ModelVersion
-from users.models import User
+from .serializers import ModelUploadSerializer
 
-BASE_STORAGE = os.path.join(settings.BASE_DIR, "storage", "models")
+BASE_STORAGE = Path(settings.BASE_DIR) / "storage" / "models"
 
 
-@csrf_exempt
-def upload_model(request):
+class ModelUploadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
+    def post(self, request):
+        serializer = ModelUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        upload_file = serializer.validated_data["file"]
 
-    file = request.FILES.get("file")
+        if upload_file.size > settings.MAX_MODEL_ZIP_BYTES:
+            return Response({"error": "Uploaded zip exceeds max allowed size"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not file:
-        return JsonResponse({"error": "No file uploaded"}, status=400)
+        model_id = str(uuid.uuid4())
+        model_root = BASE_STORAGE / model_id
+        version = "v1"
+        version_path = model_root / version
+        zip_path = version_path / "model.zip"
 
-    if not file.name.endswith(".zip"):
-        return JsonResponse({"error": "Only .zip files allowed"}, status=400)
+        try:
+            version_path.mkdir(parents=True, exist_ok=True)
 
-    model_id = str(uuid.uuid4())
+            with open(zip_path, "wb+") as dest:
+                for chunk in upload_file.chunks():
+                    dest.write(chunk)
 
-    try:
-        # Create model directory
-        model_root = os.path.join(BASE_STORAGE, model_id)
-        os.makedirs(model_root, exist_ok=True)
+            base = version_path.resolve()
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                for member in zip_ref.namelist():
+                    target = (version_path / member).resolve()
+                    try:
+                        target.relative_to(base)
+                    except ValueError:
+                        raise ValueError("Unsafe file path in zip")
+                zip_ref.extractall(version_path)
 
-        # Version logic
-        existing_versions = os.listdir(model_root)
-        version = f"v{len(existing_versions) + 1}"
+            zip_path.unlink(missing_ok=True)
 
-        version_path = os.path.join(model_root, version)
-        os.makedirs(version_path, exist_ok=True)
+            yaml_path = version_path / "model.yaml"
+            if not yaml_path.exists():
+                raise ValueError("model.yaml missing")
 
-        zip_path = os.path.join(version_path, "model.zip")
-
-        # Save zip
-        with open(zip_path, "wb+") as dest:
-            for chunk in file.chunks():
-                dest.write(chunk)
-
-        # Extract safely
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            for member in zip_ref.namelist():
-                member_path = os.path.join(version_path, member)
-                if not os.path.abspath(member_path).startswith(os.path.abspath(version_path)):
-                    raise Exception("Unsafe file path in zip")
-
-            zip_ref.extractall(version_path)
-
-        os.remove(zip_path)
-
-        # Validate YAML
-        yaml_path = os.path.join(version_path, "model.yaml")
-
-        if not os.path.exists(yaml_path):
-            raise Exception("model.yaml missing")
-
-        with open(yaml_path, "r") as f:
-            try:
+            with open(yaml_path, "r") as f:
                 config = yaml.safe_load(f)
-            except Exception:
-                raise Exception("Invalid YAML format")
 
-        # Required fields
-        # ---- MODEL SECTION ----
-            if "model" not in config:
-                raise Exception("model section missing")
+            if not isinstance(config, dict):
+                raise ValueError("model.yaml must contain a valid object")
 
+            model_cfg = config.get("model")
+            runtime = config.get("runtime")
+            artifacts = config.get("artifacts")
+
+            if not isinstance(model_cfg, dict):
+                raise ValueError("model section missing")
             for field in ["name", "framework", "task"]:
-                if field not in config["model"]:
-                    raise Exception(f"model.{field} missing")
+                if field not in model_cfg:
+                    raise ValueError(f"model.{field} missing")
 
-            # ---- RUNTIME SECTION ----
-            if "runtime" not in config:
-                raise Exception("runtime section missing")
+            if not isinstance(runtime, dict):
+                raise ValueError("runtime section missing")
+            entry_point = runtime.get("entry_point")
+            if not entry_point:
+                raise ValueError("runtime.entry_point missing")
 
-            if "entry_point" not in config["runtime"]:
-                raise Exception("runtime.entry_point missing")
+            if not isinstance(artifacts, dict):
+                raise ValueError("artifacts section missing")
 
-            # ---- ARTIFACTS (optional but recommended) ----
-            if "artifacts" not in config:
-                raise Exception("artifacts section missing")
+            # Validate required artifact files by runtime entry point
+            if entry_point == "pipeline.py":
+                if not (version_path / "pipeline.py").exists():
+                    raise ValueError("pipeline.py not found")
+            elif entry_point == "pipeline.pkl":
+                pipeline_file = artifacts.get("pipeline_file", "pipeline.pkl")
+                if not (version_path / pipeline_file).exists():
+                    raise ValueError(f"{pipeline_file} not found")
+            elif entry_point == "model.pkl":
+                model_file = artifacts.get("model_file", "model.pkl")
+                if not (version_path / model_file).exists():
+                    raise ValueError(f"{model_file} not found")
+            else:
+                raise ValueError(f"Invalid runtime.entry_point: {entry_point}")
 
-        # Get user (temporary)
-        user = User.objects.first()
-        if not user:
-            return JsonResponse({"error": "No users found"}, status=400)
+            model = Model.objects.create(
+                id=model_id,
+                name=model_cfg["name"],
+                framework=model_cfg["framework"],
+                task_type=model_cfg["task"],
+                owner=request.user,
+            )
 
-        # Create Model
-        model = Model.objects.create(
-            id=model_id,
-            name=config["model"]["name"],
-            framework=config["model"]["framework"],
-            task_type=config["model"]["task"],
-            owner=user
-        )
+            ModelVersion.objects.create(
+                model=model,
+                version=version,
+                artifact_path=str(version_path),
+                status="READY",
+            )
 
-        # Create Version
-        ModelVersion.objects.create(
-            model=model,
-            version=version,
-            artifact_path=version_path,
-            status="READY"
-        )
+            return Response(
+                {"message": "Model uploaded successfully", "model_id": model_id, "version": version},
+                status=status.HTTP_201_CREATED,
+            )
 
-        return JsonResponse({
-            "message": "Model uploaded successfully",
-            "model_id": model_id,
-            "version": version
-        })
-
-    except Exception as e:
-        if os.path.exists(os.path.join(BASE_STORAGE, model_id)):
-            shutil.rmtree(os.path.join(BASE_STORAGE, model_id))
-
-        return JsonResponse({"error": str(e)}, status=400)
+        except Exception as e:
+            if model_root.exists():
+                shutil.rmtree(model_root)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
