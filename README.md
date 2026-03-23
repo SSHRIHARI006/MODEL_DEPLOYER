@@ -13,6 +13,9 @@ This project provides a structured system to manage the lifecycle of machine lea
 * Deploy models as API endpoints
 * Track prediction logs and usage
 * API key-based access control
+* JWT-based authentication
+* DRF-based API architecture (APIView + serializers + permissions)
+* Integration testing with pytest
 * Admin panel for internal management
 
 ## Tech Stack
@@ -21,6 +24,7 @@ This project provides a structured system to manage the lifecycle of machine lea
 * Database: PostgreSQL
 * Language: Python 3.12
 * Configuration: YAML
+* Testing: pytest, pytest-django
 
 ## Project Structure
 
@@ -34,7 +38,9 @@ MODEL_DEPLOYER/
 ├── prediction_gateway/     # Inference endpoints
 ├── monitoring/             # Logs and metrics
 ├── webapp/                 # Basic frontend and templates
-├── core/                   # Shared utilities
+├── runners/                # Runner abstraction (in progress)
+├── tests/                  # Integration tests
+├── conftest.py             # Shared pytest fixtures
 │
 ├── config/                 # Django settings and routing
 ├── templates/              # HTML templates
@@ -71,7 +77,7 @@ uv sync
 
 ### 4. Configure database
 
-Update database settings in `config/settings.py` or use environment variables.
+Use environment variables (recommended). Copy `.env.example` to `.env` and set values.
 
 ### 5. Run migrations
 
@@ -92,12 +98,51 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+### 8. Run tests
+
+```
+pytest -v --ds=config.settings_test
+pytest --cov=. --cov-report=term-missing --ds=config.settings_test
+```
+
 ---
 
-## API Endpoints (Initial)
+## API Endpoints (Current)
 
-* `POST /api/models/upload/` — Upload model package
-* `POST /api/predict/<model_id>/` — Run inference
+Authentication:
+* `POST /api/auth/register/` — Register user
+* `POST /api/auth/login/` — Obtain JWT access/refresh tokens
+* `POST /api/auth/refresh/` — Refresh access token
+
+Model Registry:
+* `POST /api/models/upload/` — Upload model package (authenticated)
+
+API Keys:
+* `GET /api/keys/` — List API keys for current user
+* `POST /api/keys/` — Create API key for owned model
+* `POST /api/keys/<key_id>/deactivate/` — Deactivate API key
+
+Prediction Gateway:
+* `POST /api/predict/<model_id>/` — Run inference (JWT + X-API-Key)
+
+---
+
+## Testing
+
+The project uses app-level tests and integration tests:
+
+* `authentication/tests/`
+* `api_keys/tests/`
+* `model_registry/tests/`
+* `prediction_gateway/tests/`
+* `tests/integration/`
+
+All tests currently pass with end-to-end flow coverage for:
+
+* User registration and login
+* Model upload
+* API key creation
+* Prediction request lifecycle
 
 ---
 
@@ -106,19 +151,21 @@ python manage.py runserver
 The project currently includes:
 
 * Database schema and relationships
-* Admin panel integration
-* Basic API routing and testing
-* Initial model upload functionality (in progress)
+* DRF migration for core API endpoints
+* JWT authentication + API key authorization
+* Model upload validation and safe extraction checks
+* Prediction logging with success/error tracking
+* Automated API and integration test suite
 
 ---
 
 ## Future Work
 
-* Model execution and inference engine
-* Docker-based deployments
-* Authentication and permissions
-* Dashboard for model monitoring
-* Support for multiple ML frameworks
+* Usage metrics and monitoring endpoints
+* User dashboard and improved admin dashboard UX
+* Runner abstraction completion for multiple ML frameworks
+* Docker-based isolated execution for model runtimes
+* Support for sklearn, TensorFlow, PyTorch, transformers, and RAG flows
 
 ---
 

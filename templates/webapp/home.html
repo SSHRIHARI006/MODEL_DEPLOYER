@@ -1,10 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ML Platform</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Deployer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f2efe9;
+            --ink: #1e1f22;
+            --brand: #0f766e;
+            --brand-2: #155e75;
+            --panel: #ffffffcc;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at 10% 20%, #facc15 0%, transparent 40%),
+                        radial-gradient(circle at 85% 80%, #99f6e4 0%, transparent 35%),
+                        var(--bg);
+            color: var(--ink);
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+        .hero {
+            width: min(940px, 100%);
+            background: var(--panel);
+            border: 1px solid #00000018;
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 70px #00000015;
+            animation: rise .6s ease-out;
+        }
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        h1 {
+            margin: 0 0 12px;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+            line-height: 1.05;
+        }
+        p {
+            font-size: 1.05rem;
+            max-width: 720px;
+            margin: 0 0 22px;
+        }
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+        .chip {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .8rem;
+            background: #111827;
+            color: #f9fafb;
+            border-radius: 999px;
+            padding: 7px 12px;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            border: none;
+            border-radius: 12px;
+            padding: 12px 18px;
+            text-decoration: none;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            transition: transform .15s ease;
+        }
+        .btn.secondary {
+            background: #111827;
+        }
+        .btn:hover { transform: translateY(-1px); }
+    </style>
 </head>
 <body>
-    <h1>Welcome to ML Platform</h1>
-    <p>Deploy ML models as APIs</p>
+    <main class="hero">
+        <h1>Ship models fast. Track them like products.</h1>
+        <p>Model Deployer helps you upload, version, secure, and monitor ML models with JWT auth, API keys, and built-in metrics APIs.</p>
+        <div class="chips">
+            <span class="chip">Django + DRF</span>
+            <span class="chip">JWT + API Keys</span>
+            <span class="chip">Metrics + Monitoring</span>
+            <span class="chip">Phase 1 Dashboard</span>
+        </div>
+        <div class="actions">
+            <a class="btn" href="/auth/">Login / Sign Up</a>
+            <a class="btn secondary" href="/dashboard/">Open Dashboard</a>
+        </div>
+    </main>
 </body>
 </html>

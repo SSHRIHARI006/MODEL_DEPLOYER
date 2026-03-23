@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | Model Deployer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #111827;
+            --muted: #334155;
+            --line: #1f2937;
+            --text: #e5e7eb;
+            --acc: #22c55e;
+            --acc2: #0ea5e9;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            background:
+                radial-gradient(circle at 5% 20%, #0ea5e933 0%, transparent 35%),
+                radial-gradient(circle at 85% 80%, #22c55e33 0%, transparent 30%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .title { margin: 0; font-size: clamp(1.4rem, 2.8vw, 2rem); }
+        .btn {
+            border: none;
+            border-radius: 11px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn.dark { background: #020617; color: #fff; }
+        .grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            margin-bottom: 16px;
+        }
+        .card {
+            background: #0b1222cc;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px;
+            backdrop-filter: blur(2px);
+        }
+        .k {
+            font-size: .8rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            font-family: "IBM Plex Mono", monospace;
+        }
+        .v {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 1.1fr .9fr;
+            gap: 14px;
+        }
+        .stack { display: grid; gap: 14px; }
+        .panel {
+            background: #0b1222cc;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px;
+        }
+        h2 {
+            margin: 0 0 10px;
+            font-size: 1rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .92rem;
+        }
+        th, td {
+            border-bottom: 1px solid #243047;
+            text-align: left;
+            padding: 8px 6px;
+            vertical-align: top;
+        }
+        input[type="file"] {
+            width: 100%;
+            border: 1px dashed #2e3f5c;
+            border-radius: 10px;
+            padding: 9px;
+            color: #cbd5e1;
+            background: #0f1a30;
+        }
+        .pill {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .75rem;
+            background: #082f49;
+            color: #7dd3fc;
+        }
+        .status-ok { color: #4ade80; }
+        .status-err { color: #f87171; }
+        .muted { color: #94a3b8; }
+        a {
+            color: #7dd3fc;
+            text-decoration: none;
+        }
+        @media (max-width: 980px) {
+            .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 560px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="top">
+        <h1 class="title">Model Deployer Dashboard</h1>
+        <div>
+            <button id="refresh-btn" class="btn dark">Refresh</button>
+            <button id="logout-btn" class="btn dark">Logout</button>
+        </div>
+    </header>
+
+    <section class="grid" id="metrics-cards"></section>
+
+    <section class="layout">
+        <div class="stack">
+            <article class="panel">
+                <h2>Your Models</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Framework</th>
+                            <th>Requests</th>
+                            <th>Success%</th>
+                            <th>Open</th>
+                        </tr>
+                    </thead>
+                    <tbody id="models-body"></tbody>
+                </table>
+            </article>
+
+            <article class="panel">
+                <h2>Recent Predictions</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Status</th>
+                            <th>Latency</th>
+                            <th>At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-body"></tbody>
+                </table>
+            </article>
+        </div>
+
+        <div class="stack">
+            <article class="panel">
+                <h2>Add Model</h2>
+                <form id="upload-form">
+                    <input id="zip-file" type="file" accept=".zip" required />
+                    <button class="btn dark" type="submit" style="margin-top:10px; width:100%;">Upload</button>
+                </form>
+                <p class="muted" id="upload-msg"></p>
+            </article>
+
+            <article class="panel">
+                <h2>Quick Tips</h2>
+                <p class="muted">Use model detail to generate/deactivate API keys and view model-level metrics.</p>
+                <p><span class="pill">JWT + X-API-Key required for predict</span></p>
+            </article>
+        </div>
+    </section>
+
+    <script>
+        const token = localStorage.getItem("md_access");
+        if (!token || token === "null" || token === "undefined") {
+            window.location.href = "/auth/";
+            throw new Error("Missing auth token");
+        }
+
+        const headers = () => ({
+            "Authorization": `Bearer ${localStorage.getItem("md_access")}`,
+            "Content-Type": "application/json"
+        });
+
+        async function refreshAccessToken() {
+            const refresh = localStorage.getItem("md_refresh");
+            if (!refresh || refresh === "null" || refresh === "undefined") return false;
+
+            const res = await fetch("/api/auth/refresh/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refresh }),
+            });
+            if (!res.ok) return false;
+
+            const data = await res.json().catch(() => ({}));
+            if (!data.access) return false;
+            localStorage.setItem("md_access", data.access);
+            return true;
+        }
+
+        async function api(url, opts = {}, allowRetry = true) {
+            const res = await fetch(url, opts);
+            if (res.status === 401) {
+                if (allowRetry) {
+                    const refreshed = await refreshAccessToken();
+                    if (refreshed) {
+                        const retryOpts = {
+                            ...opts,
+                            headers: {
+                                ...(opts.headers || {}),
+                                "Authorization": `Bearer ${localStorage.getItem("md_access")}`,
+                            },
+                        };
+                        return api(url, retryOpts, false);
+                    }
+                }
+
+                localStorage.removeItem("md_access");
+                localStorage.removeItem("md_refresh");
+                window.location.href = "/auth/";
+                throw new Error("Session expired, please login again.");
+            }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
+            return data;
+        }
+
+        function metricCard(label, value) {
+            const el = document.createElement("article");
+            el.className = "card";
+            el.innerHTML = `<div class="k">${label}</div><div class="v">${value}</div>`;
+            return el;
+        }
+
+        function ts(v) {
+            if (!v) return "-";
+            return new Date(v).toLocaleString();
+        }
+
+        async function loadDashboard() {
+            const summary = await api("/api/metrics/dashboard/summary/", { headers: headers() });
+            const models = await api("/api/metrics/dashboard/models/", { headers: headers() });
+            const recent = await api("/api/metrics/dashboard/recent-predictions/?limit=10", { headers: headers() });
+
+            const cards = document.getElementById("metrics-cards");
+            cards.innerHTML = "";
+            cards.appendChild(metricCard("Total Requests", summary.metrics.total_requests));
+            cards.appendChild(metricCard("Success Rate", `${summary.metrics.success_rate}%`));
+            cards.appendChild(metricCard("P95 Latency", `${summary.metrics.p95_latency_ms} ms`));
+            cards.appendChild(metricCard("Active API Keys", summary.active_api_keys));
+
+            const modelsBody = document.getElementById("models-body");
+            modelsBody.innerHTML = "";
+            for (const model of models) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${model.model_name}<div class="muted">v${model.latest_version || "-"}</div></td>
+                    <td>${model.framework}</td>
+                    <td>${model.total_requests}</td>
+                    <td>${model.success_rate}%</td>
+                    <td><a href="/models/${model.model_id}/">Details</a></td>
+                `;
+                modelsBody.appendChild(tr);
+            }
+
+            const recentBody = document.getElementById("recent-body");
+            recentBody.innerHTML = "";
+            for (const row of recent) {
+                const tr = document.createElement("tr");
+                const statusClass = row.status === "SUCCESS" ? "status-ok" : "status-err";
+                tr.innerHTML = `
+                    <td>${row.model_name}</td>
+                    <td class="${statusClass}">${row.status}</td>
+                    <td>${row.latency_ms.toFixed(2)} ms</td>
+                    <td>${ts(row.created_at)}</td>
+                `;
+                recentBody.appendChild(tr);
+            }
+        }
+
+        document.getElementById("upload-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const msg = document.getElementById("upload-msg");
+            const file = document.getElementById("zip-file").files[0];
+            if (!file) return;
+
+            const form = new FormData();
+            form.append("file", file);
+
+            try {
+                const res = await fetch("/api/models/upload/", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${localStorage.getItem("md_access")}` },
+                    body: form,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || data.error || "Upload failed");
+                msg.textContent = `Uploaded ${data.model_id}.`;
+                document.getElementById("zip-file").value = "";
+                await loadDashboard();
+            } catch (err) {
+                msg.textContent = err.message;
+            }
+        });
+
+        document.getElementById("refresh-btn").addEventListener("click", loadDashboard);
+        document.getElementById("logout-btn").addEventListener("click", () => {
+            localStorage.removeItem("md_access");
+            localStorage.removeItem("md_refresh");
+            window.location.href = "/auth/";
+        });
+
+        loadDashboard().catch((err) => {
+            console.error(err);
+            alert(err.message || "Failed to load dashboard");
+        });
+    </script>
+</body>
+</html>

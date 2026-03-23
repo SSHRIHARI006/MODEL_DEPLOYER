@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/models/", include("model_registry.urls")),
     path("api/auth/", include("authentication.urls")),
     path("api/keys/", include("api_keys.urls")),
+    path("api/metrics/", include("monitoring.urls")),
 ]

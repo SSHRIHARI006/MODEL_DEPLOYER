@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Detail | Model Deployer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #ecfeff;
+            --ink: #082f49;
+            --panel: #ffffff;
+            --line: #cfe9ef;
+            --brand: #0e7490;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(160deg, #ecfeff 0%, #cffafe 35%, #f0fdfa 100%);
+            color: var(--ink);
+            font-family: "Space Grotesk", sans-serif;
+            padding: 20px;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            border: none;
+            border-radius: 10px;
+            background: var(--brand);
+            color: #fff;
+            font-weight: 700;
+            padding: 9px 14px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+        }
+        .k {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .78rem;
+            color: #0f766e;
+            text-transform: uppercase;
+        }
+        .v {
+            margin-top: 3px;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .panel {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+        }
+        textarea {
+            width: 100%;
+            border: 1px solid #b5dce4;
+            border-radius: 10px;
+            padding: 10px;
+            min-height: 110px;
+            font: inherit;
+            resize: vertical;
+            margin-bottom: 8px;
+        }
+        select {
+            width: 100%;
+            border: 1px solid #b5dce4;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font: inherit;
+            background: #fff;
+        }
+        pre {
+            background: #062f3b;
+            color: #d8fbff;
+            border-radius: 10px;
+            padding: 10px;
+            overflow: auto;
+            font-size: .86rem;
+            line-height: 1.45;
+            margin: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border-bottom: 1px solid #d3e6eb;
+            text-align: left;
+            padding: 8px 4px;
+            vertical-align: top;
+            font-size: .92rem;
+        }
+        .muted { color: #115e59; font-size: .9rem; }
+        .danger {
+            background: #991b1b;
+        }
+        input {
+            width: 100%;
+            border: 1px solid #b5dce4;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font: inherit;
+        }
+        @media (max-width: 950px) {
+            .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 560px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <h1 id="title">Model</h1>
+        <div>
+            <a class="btn" href="/dashboard/">Back to Dashboard</a>
+            <button class="btn" id="refresh-btn">Refresh</button>
+        </div>
+    </div>
+
+    <section class="grid" id="metrics"></section>
+
+    <section class="layout">
+        <article class="panel">
+            <h2>API Keys</h2>
+            <form id="key-form">
+                <input id="key-name" placeholder="Key name (optional)" />
+                <button class="btn" type="submit">Generate API Key</button>
+            </form>
+            <p class="muted" id="key-msg"></p>
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Status</th><th>Created</th><th>Action</th></tr>
+                </thead>
+                <tbody id="keys-body"></tbody>
+            </table>
+        </article>
+
+        <article class="panel">
+            <h2>Recent Predictions</h2>
+            <table>
+                <thead>
+                    <tr><th>Status</th><th>Latency</th><th>At</th></tr>
+                </thead>
+                <tbody id="recent-body"></tbody>
+            </table>
+        </article>
+    </section>
+
+    <section class="panel" style="margin-top:12px;">
+        <h2>Run Inference</h2>
+        <p class="muted">Send test payload directly to this model endpoint.</p>
+        <select id="inference-key-select"></select>
+        <input id="inference-key-input" placeholder="Or paste API key manually" />
+        <textarea id="inference-payload" spellcheck="false">{
+  "input": [4]
+}</textarea>
+        <button class="btn" id="run-inference-btn" type="button">Run Prediction</button>
+        <p class="muted" id="inference-msg"></p>
+        <pre id="inference-output">{}</pre>
+    </section>
+
+    <script>
+        const modelId = "{{ model_id }}".trim();
+        const token = localStorage.getItem("md_access");
+        if (!token || token === "null" || token === "undefined") {
+            window.location.href = "/auth/";
+            throw new Error("Missing auth token");
+        }
+
+        const authHeaders = () => ({
+            "Authorization": `Bearer ${localStorage.getItem("md_access")}`,
+            "Content-Type": "application/json",
+        });
+
+        async function refreshAccessToken() {
+            const refresh = localStorage.getItem("md_refresh");
+            if (!refresh || refresh === "null" || refresh === "undefined") return false;
+
+            const res = await fetch("/api/auth/refresh/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refresh }),
+            });
+            if (!res.ok) return false;
+
+            const data = await res.json().catch(() => ({}));
+            if (!data.access) return false;
+            localStorage.setItem("md_access", data.access);
+            return true;
+        }
+
+        async function api(url, opts = {}, allowRetry = true) {
+            const res = await fetch(url, opts);
+            if (res.status === 401) {
+                if (allowRetry) {
+                    const refreshed = await refreshAccessToken();
+                    if (refreshed) {
+                        const retryOpts = {
+                            ...opts,
+                            headers: {
+                                ...(opts.headers || {}),
+                                "Authorization": `Bearer ${localStorage.getItem("md_access")}`,
+                            },
+                        };
+                        return api(url, retryOpts, false);
+                    }
+                }
+
+                localStorage.removeItem("md_access");
+                localStorage.removeItem("md_refresh");
+                window.location.href = "/auth/";
+                throw new Error("Session expired, please login again.");
+            }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
+            return data;
+        }
+
+        function metric(label, value) {
+            return `<article class="card"><div class="k">${label}</div><div class="v">${value}</div></article>`;
+        }
+
+        function ts(v) {
+            return v ? new Date(v).toLocaleString() : "-";
+        }
+
+        function safeJson(value) {
+            try {
+                return JSON.parse(value);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        let currentModelKeys = [];
+
+        function refreshInferenceKeySelector() {
+            const select = document.getElementById("inference-key-select");
+            select.innerHTML = "";
+
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "Select an active API key";
+            select.appendChild(defaultOption);
+
+            currentModelKeys
+                .filter((k) => k.is_active)
+                .forEach((k) => {
+                    const option = document.createElement("option");
+                    option.value = k.key || "";
+                    option.textContent = `${k.name} (${k.id.slice(0, 8)})`;
+                    select.appendChild(option);
+                });
+        }
+
+        async function loadData() {
+            const [models, m, recent, keys] = await Promise.all([
+                api("/api/metrics/dashboard/models/", { headers: authHeaders() }),
+                api(`/api/metrics/models/${modelId}/`, { headers: authHeaders() }),
+                api("/api/metrics/dashboard/recent-predictions/?limit=50", { headers: authHeaders() }),
+                api("/api/keys/", { headers: authHeaders() }),
+            ]);
+
+            const model = models.find((x) => x.model_id === modelId);
+            document.getElementById("title").textContent = model ? `${model.model_name} (${model.framework})` : `Model ${modelId}`;
+
+            const metrics = document.getElementById("metrics");
+            metrics.innerHTML = [
+                metric("Requests", m.total_requests),
+                metric("Success Rate", `${m.success_rate}%`),
+                metric("Avg Latency", `${m.avg_latency_ms} ms`),
+                metric("P95 Latency", `${m.p95_latency_ms} ms`),
+            ].join("");
+
+            const keysBody = document.getElementById("keys-body");
+            keysBody.innerHTML = "";
+            const modelKeys = keys.filter((k) => k.model_id === modelId);
+            currentModelKeys = modelKeys;
+            refreshInferenceKeySelector();
+            for (const k of modelKeys) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${k.name}</td>
+                    <td>${k.is_active ? "ACTIVE" : "INACTIVE"}</td>
+                    <td>${ts(k.created_at)}</td>
+                    <td>${k.is_active ? `<button class="btn danger" data-id="${k.id}">Deactivate</button>` : "-"}</td>
+                `;
+                keysBody.appendChild(tr);
+            }
+
+            keysBody.querySelectorAll("button[data-id]").forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                    await api(`/api/keys/${btn.dataset.id}/deactivate/`, {
+                        method: "POST",
+                        headers: authHeaders(),
+                    });
+                    await loadData();
+                });
+            });
+
+            const recentBody = document.getElementById("recent-body");
+            recentBody.innerHTML = "";
+            recent.filter((r) => r.model_id === modelId).slice(0, 12).forEach((r) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${r.status}</td><td>${r.latency_ms.toFixed(2)} ms</td><td>${ts(r.created_at)}</td>`;
+                recentBody.appendChild(tr);
+            });
+        }
+
+        document.getElementById("key-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const name = document.getElementById("key-name").value.trim() || "dashboard-key";
+            const msg = document.getElementById("key-msg");
+            try {
+                const data = await api("/api/keys/", {
+                    method: "POST",
+                    headers: authHeaders(),
+                    body: JSON.stringify({ model_id: modelId, name }),
+                });
+                msg.textContent = `New key: ${data.key}`;
+                document.getElementById("inference-key-input").value = data.key;
+                document.getElementById("key-name").value = "";
+                await loadData();
+            } catch (err) {
+                msg.textContent = err.message;
+            }
+        });
+
+        document.getElementById("inference-key-select").addEventListener("change", (e) => {
+            if (e.target.value) {
+                document.getElementById("inference-key-input").value = e.target.value;
+            }
+        });
+
+        document.getElementById("run-inference-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("inference-msg");
+            const output = document.getElementById("inference-output");
+            const payloadText = document.getElementById("inference-payload").value;
+            const apiKey = document.getElementById("inference-key-input").value.trim() || document.getElementById("inference-key-select").value;
+
+            const payload = safeJson(payloadText);
+            if (!payload) {
+                msg.textContent = "Payload must be valid JSON.";
+                return;
+            }
+            if (!apiKey) {
+                msg.textContent = "Select or paste an API key first.";
+                return;
+            }
+
+            msg.textContent = "Running inference...";
+            try {
+                const data = await api(`/api/predict/${modelId}/`, {
+                    method: "POST",
+                    headers: {
+                        ...authHeaders(),
+                        "X-API-Key": apiKey,
+                    },
+                    body: JSON.stringify(payload),
+                });
+                output.textContent = JSON.stringify(data, null, 2);
+                msg.textContent = "Prediction successful.";
+                await loadData();
+            } catch (err) {
+                output.textContent = JSON.stringify({ error: err.message }, null, 2);
+                msg.textContent = err.message;
+            }
+        });
+
+        document.getElementById("refresh-btn").addEventListener("click", loadData);
+        loadData().catch((err) => alert(err.message || "Failed to load model"));
+    </script>
+</body>
+</html>

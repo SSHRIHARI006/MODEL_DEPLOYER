@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth | Model Deployer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f3ee;
+            --panel: #fff;
+            --ink: #1f2937;
+            --line: #e5e7eb;
+            --brand: #dc2626;
+            --brand-2: #7f1d1d;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: linear-gradient(120deg, #fef3c7 0%, #fee2e2 45%, #fce7f3 100%);
+            color: var(--ink);
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .wrap {
+            width: min(980px, 100%);
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 18px;
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 18px 45px #00000014;
+        }
+        h1, h2 { margin: 0 0 10px; }
+        p { margin: 0 0 20px; }
+        .mini {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .86rem;
+            color: #4b5563;
+        }
+        form { display: grid; gap: 12px; }
+        input {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 11px 12px;
+            font: inherit;
+        }
+        button {
+            border: none;
+            background: linear-gradient(130deg, var(--brand), var(--brand-2));
+            color: #fff;
+            font-weight: 700;
+            border-radius: 12px;
+            padding: 11px 14px;
+            cursor: pointer;
+        }
+        .ok, .err {
+            margin-top: 10px;
+            font-size: .9rem;
+            font-family: "IBM Plex Mono", monospace;
+        }
+        .ok { color: #166534; }
+        .err { color: #b91c1c; }
+        .nav {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+        }
+        .link {
+            text-decoration: none;
+            color: #111827;
+            font-weight: 600;
+        }
+        @media (max-width: 860px) {
+            .wrap { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <section class="card">
+            <h1>Welcome Back</h1>
+            <p>Login to manage models, keys, and monitoring data.</p>
+            <form id="login-form">
+                <input type="email" id="login-email" placeholder="Email" required />
+                <input type="password" id="login-password" placeholder="Password" required />
+                <button type="submit">Login</button>
+            </form>
+            <div id="login-msg" class="mini"></div>
+            <div class="nav"><a class="link" href="/">Home</a></div>
+        </section>
+
+        <section class="card">
+            <h2>Create Account</h2>
+            <p>Register and start deploying models in minutes.</p>
+            <form id="signup-form">
+                <input type="email" id="signup-email" placeholder="Email" required />
+                <input type="password" id="signup-password" placeholder="Password (min 8 chars)" minlength="8" required />
+                <button type="submit">Sign Up</button>
+            </form>
+            <div id="signup-msg" class="mini"></div>
+        </section>
+    </div>
+
+    <script>
+        const existingAccess = localStorage.getItem("md_access");
+        if (existingAccess && existingAccess !== "null" && existingAccess !== "undefined") {
+            window.location.href = "/dashboard/";
+        }
+
+        const loginForm = document.getElementById("login-form");
+        const signupForm = document.getElementById("signup-form");
+        const loginMsg = document.getElementById("login-msg");
+        const signupMsg = document.getElementById("signup-msg");
+
+        function setMsg(el, text, ok = false) {
+            el.className = ok ? "ok" : "err";
+            el.textContent = text;
+        }
+
+        async function login(email, password) {
+            const res = await fetch("/api/auth/login/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const detail = typeof data.detail === "string" ? data.detail : "";
+                throw new Error(detail || data.error || "Login failed");
+            }
+            localStorage.setItem("md_access", data.access);
+            localStorage.setItem("md_refresh", data.refresh || "");
+            window.location.href = "/dashboard/";
+        }
+
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            try {
+                await login(
+                    document.getElementById("login-email").value,
+                    document.getElementById("login-password").value
+                );
+            } catch (err) {
+                setMsg(loginMsg, err.message, false);
+            }
+        });
+
+        signupForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = document.getElementById("signup-email").value;
+            const password = document.getElementById("signup-password").value;
+
+            const res = await fetch("/api/auth/register/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                setMsg(signupMsg, data.detail || data.error || "Signup failed", false);
+                return;
+            }
+
+            setMsg(signupMsg, "Signup successful, logging you in...", true);
+            try {
+                await login(email, password);
+            } catch (err) {
+                setMsg(signupMsg, err.message, false);
+            }
+        });
+    </script>
+</body>
+</html>
