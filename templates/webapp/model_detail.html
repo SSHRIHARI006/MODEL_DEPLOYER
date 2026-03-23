@@ -119,6 +119,19 @@
         .danger {
             background: #991b1b;
         }
+        .banner {
+            margin-bottom: 12px;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .82rem;
+            border: 1px solid transparent;
+            display: none;
+        }
+        .banner.show { display: block; }
+        .banner.info { background: #0833441f; border-color: #0e749066; color: #0f766e; }
+        .banner.success { background: #052e1622; border-color: #22c55e66; color: #166534; }
+        .banner.error { background: #450a0a22; border-color: #ef444466; color: #991b1b; }
         input {
             width: 100%;
             border: 1px solid #b5dce4;
@@ -144,6 +157,8 @@
             <button class="btn" id="refresh-btn">Refresh</button>
         </div>
     </div>
+
+    <div id="status-banner" class="banner"></div>
 
     <section class="grid" id="metrics"></section>
 
@@ -252,6 +267,18 @@
             return v ? new Date(v).toLocaleString() : "-";
         }
 
+        function showBanner(text, type = "info") {
+            const banner = document.getElementById("status-banner");
+            banner.className = `banner show ${type}`;
+            banner.textContent = text;
+        }
+
+        function clearBanner() {
+            const banner = document.getElementById("status-banner");
+            banner.className = "banner";
+            banner.textContent = "";
+        }
+
         function safeJson(value) {
             try {
                 return JSON.parse(value);
@@ -282,6 +309,7 @@
         }
 
         async function loadData() {
+            showBanner("Loading model data...", "info");
             const [models, m, recent, keys] = await Promise.all([
                 api("/api/metrics/dashboard/models/", { headers: authHeaders() }),
                 api(`/api/metrics/models/${modelId}/`, { headers: authHeaders() }),
@@ -333,6 +361,8 @@
                 tr.innerHTML = `<td>${r.status}</td><td>${r.latency_ms.toFixed(2)} ms</td><td>${ts(r.created_at)}</td>`;
                 recentBody.appendChild(tr);
             });
+
+            clearBanner();
         }
 
         document.getElementById("key-form").addEventListener("submit", async (e) => {
@@ -346,11 +376,13 @@
                     body: JSON.stringify({ model_id: modelId, name }),
                 });
                 msg.textContent = `New key: ${data.key}`;
+                showBanner("API key generated successfully.", "success");
                 document.getElementById("inference-key-input").value = data.key;
                 document.getElementById("key-name").value = "";
                 await loadData();
             } catch (err) {
                 msg.textContent = err.message;
+                showBanner(err.message, "error");
             }
         });
 
@@ -377,6 +409,7 @@
             }
 
             msg.textContent = "Running inference...";
+            showBanner("Running inference...", "info");
             try {
                 const data = await api(`/api/predict/${modelId}/`, {
                     method: "POST",
@@ -388,15 +421,17 @@
                 });
                 output.textContent = JSON.stringify(data, null, 2);
                 msg.textContent = "Prediction successful.";
+                showBanner("Prediction successful.", "success");
                 await loadData();
             } catch (err) {
                 output.textContent = JSON.stringify({ error: err.message }, null, 2);
                 msg.textContent = err.message;
+                showBanner(err.message, "error");
             }
         });
 
         document.getElementById("refresh-btn").addEventListener("click", loadData);
-        loadData().catch((err) => alert(err.message || "Failed to load model"));
+        loadData().catch((err) => showBanner(err.message || "Failed to load model", "error"));
     </script>
 </body>
 </html>

@@ -117,6 +117,19 @@
         .status-ok { color: #4ade80; }
         .status-err { color: #f87171; }
         .muted { color: #94a3b8; }
+        .banner {
+            margin-bottom: 14px;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: .82rem;
+            border: 1px solid transparent;
+            display: none;
+        }
+        .banner.show { display: block; }
+        .banner.info { background: #082f491f; border-color: #0ea5e966; color: #7dd3fc; }
+        .banner.success { background: #052e1622; border-color: #22c55e66; color: #86efac; }
+        .banner.error { background: #450a0a33; border-color: #ef444466; color: #fecaca; }
         a {
             color: #7dd3fc;
             text-decoration: none;
@@ -138,6 +151,8 @@
             <button id="logout-btn" class="btn dark">Logout</button>
         </div>
     </header>
+
+    <div id="status-banner" class="banner"></div>
 
     <section class="grid" id="metrics-cards"></section>
 
@@ -249,6 +264,18 @@
             return data;
         }
 
+        function showBanner(text, type = "info") {
+            const banner = document.getElementById("status-banner");
+            banner.className = `banner show ${type}`;
+            banner.textContent = text;
+        }
+
+        function clearBanner() {
+            const banner = document.getElementById("status-banner");
+            banner.className = "banner";
+            banner.textContent = "";
+        }
+
         function metricCard(label, value) {
             const el = document.createElement("article");
             el.className = "card";
@@ -262,6 +289,7 @@
         }
 
         async function loadDashboard() {
+            showBanner("Loading dashboard...", "info");
             const summary = await api("/api/metrics/dashboard/summary/", { headers: headers() });
             const models = await api("/api/metrics/dashboard/models/", { headers: headers() });
             const recent = await api("/api/metrics/dashboard/recent-predictions/?limit=10", { headers: headers() });
@@ -300,6 +328,8 @@
                 `;
                 recentBody.appendChild(tr);
             }
+
+            clearBanner();
         }
 
         document.getElementById("upload-form").addEventListener("submit", async (e) => {
@@ -320,10 +350,12 @@
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(data.detail || data.error || "Upload failed");
                 msg.textContent = `Uploaded ${data.model_id}.`;
+                showBanner("Model uploaded successfully.", "success");
                 document.getElementById("zip-file").value = "";
                 await loadDashboard();
             } catch (err) {
                 msg.textContent = err.message;
+                showBanner(err.message, "error");
             }
         });
 
@@ -336,7 +368,7 @@
 
         loadDashboard().catch((err) => {
             console.error(err);
-            alert(err.message || "Failed to load dashboard");
+            showBanner(err.message || "Failed to load dashboard", "error");
         });
     </script>
 </body>

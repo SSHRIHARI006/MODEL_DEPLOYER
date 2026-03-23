@@ -17,6 +17,11 @@ This project provides a structured system to manage the lifecycle of machine lea
 * DRF-based API architecture (APIView + serializers + permissions)
 * Integration testing with pytest
 * Admin panel for internal management
+* Monitoring APIs for platform and model usage
+* Health endpoint for service/database status checks
+* Scoped rate limiting for prediction traffic
+* Structured request logging with request IDs
+* Basic web dashboard for auth, model management, and inference checks
 
 ## Tech Stack
 
@@ -125,6 +130,14 @@ API Keys:
 Prediction Gateway:
 * `POST /api/predict/<model_id>/` — Run inference (JWT + X-API-Key)
 
+Monitoring:
+* `GET /api/metrics/overview/` — Global usage and performance overview
+* `GET /api/metrics/model/<model_id>/` — Per-model usage and performance
+* `GET /api/metrics/dashboard/summary/` — Dashboard summary counters
+* `GET /api/metrics/dashboard/recent/` — Recent prediction activity
+* `GET /api/metrics/dashboard/models/` — User model list with quick stats
+* `GET /api/metrics/health/` — Service health (includes DB check)
+
 ---
 
 ## Testing
@@ -135,6 +148,7 @@ The project uses app-level tests and integration tests:
 * `api_keys/tests/`
 * `model_registry/tests/`
 * `prediction_gateway/tests/`
+* `monitoring/tests/`
 * `tests/integration/`
 
 All tests currently pass with end-to-end flow coverage for:
@@ -144,9 +158,20 @@ All tests currently pass with end-to-end flow coverage for:
 * API key creation
 * Prediction request lifecycle
 
+Quick scripts for manual verification:
+
+* `scripts/e2e_smoke.sh` — happy-path API flow
+* `scripts/e2e_negative.sh` — negative cases + predict rate-limit checks
+
 ---
 
 ## Current Status
+
+## Phase 1 Completed
+
+Phase 1 is complete for the initial model deployment platform scope.
+
+Completed scope:
 
 The project currently includes:
 
@@ -155,17 +180,25 @@ The project currently includes:
 * JWT authentication + API key authorization
 * Model upload validation and safe extraction checks
 * Prediction logging with success/error tracking
+* Monitoring and dashboard APIs
+* Basic web frontend pages (auth, dashboard, model detail)
+* Health checks, request logging, and prediction throttling
 * Automated API and integration test suite
 
 ---
 
 ## Future Work
 
-* Usage metrics and monitoring endpoints
-* User dashboard and improved admin dashboard UX
 * Runner abstraction completion for multiple ML frameworks
 * Docker-based isolated execution for model runtimes
 * Support for sklearn, TensorFlow, PyTorch, transformers, and RAG flows
+
+## Environment Notes
+
+By default, PostgreSQL is used when `POSTGRES_PASSWORD` is set.
+For local/dev fallback with minimal setup, enable SQLite:
+
+* `DJANGO_USE_SQLITE=true`
 
 ---
 
