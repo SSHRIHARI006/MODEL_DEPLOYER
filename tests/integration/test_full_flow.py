@@ -3,6 +3,9 @@ import zipfile
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from deployments.models import Deployment
+from model_registry.models import Model
+
 pytestmark = pytest.mark.django_db
 
 
@@ -15,7 +18,15 @@ def _zip_bytes(files: dict[str, str]) -> bytes:
 
 
 def test_full_flow_register_login_upload_key_predict(api_client, monkeypatch):
-    monkeypatch.setattr("prediction_gateway.views.run_inference", lambda path, data: [9.99])
+    class DummyResponse:
+        status_code = 200
+        content = b"{}"
+
+        @staticmethod
+        def json():
+            return {"prediction": [9.99]}
+
+    monkeypatch.setattr("prediction_gateway.views.requests.post", lambda *args, **kwargs: DummyResponse())
 
     reg = api_client.post(
         "/api/auth/register/",
@@ -60,6 +71,14 @@ artifacts:
     key_res = api_client.post("/api/keys/", {"model_id": model_id, "name": "flow-key"}, format="json")
     assert key_res.status_code == 201
     api_key = key_res.data["key"]
+
+    model = Model.objects.get(id=model_id)
+    version = model.versions.order_by("-created_at").first()
+    Deployment.objects.create(
+        model_version=version,
+        status=Deployment.Status.RUNNING,
+        internal_url="http://model_test:5000",
+    )
 
     api_client.credentials(
         HTTP_AUTHORIZATION=f"Bearer {token}",

@@ -1,11 +1,5 @@
-import importlib.util
-import json
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-
-import joblib
-import yaml
+import requests
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -14,18 +8,11 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from deployments.models import Deployment
 from model_registry.models import Model
 from .models import PredictionLog
 from .permissions import HasValidModelAPIKey
 from .serializers import PredictRequestSerializer
-
-
-class InferenceClientError(Exception):
-    pass
-
-
-class InferenceServerError(Exception):
-    pass
 
 
 class PredictAPIView(APIView):
@@ -36,62 +23,81 @@ class PredictAPIView(APIView):
     def post(self, request, model_id):
         model = get_object_or_404(Model, id=model_id)
 
-        version = model.versions.order_by("-created_at").first()
-        if not version:
-            return Response({"error": "No version found"}, status=status.HTTP_404_NOT_FOUND)
+        deployment = (
+            Deployment.objects.select_related("model_version")
+            .filter(
+                model_version__model=model,
+                status=Deployment.Status.RUNNING,
+                internal_url__isnull=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if not deployment:
+            return Response(
+                {"error": "No running deployment available for this model"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         serializer = PredictRequestSerializer(data={"payload": request.data})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data["payload"]
 
         start = time.time()
-        executor = ThreadPoolExecutor(max_workers=1)
         try:
-            future = executor.submit(run_inference, version.artifact_path, data)
-            result = future.result(timeout=settings.INFERENCE_TIMEOUT_SECONDS)
+            result, upstream_status = self._forward_to_container(deployment.internal_url, data)
             latency = (time.time() - start) * 1000
+
+            log_status = "SUCCESS" if upstream_status < 400 else "ERROR"
+            err_msg = None
+            if upstream_status >= 400:
+                err_msg = str(result.get("error") or result.get("detail") or "Upstream client error")
 
             PredictionLog.objects.create(
                 uid=str(time.time()),
                 user=request.user,
                 model=model,
-                deployment=None,
+                deployment=deployment,
                 input_data=data,
-                output_data={"prediction": result},
+                output_data=result,
                 latency_ms=latency,
-                status="SUCCESS",
+                status=log_status,
+                error_message=err_msg,
             )
-            return Response({"prediction": result, "latency_ms": latency}, status=status.HTTP_200_OK)
+            return Response(result, status=upstream_status)
 
-        except FuturesTimeoutError:
+        except requests.Timeout:
             latency = (time.time() - start) * 1000
             PredictionLog.objects.create(
                 uid=str(time.time()),
                 user=request.user,
                 model=model,
-                deployment=None,
-                input_data=data,
-                output_data={},
-                latency_ms=latency,
-                status="ERROR",
-                error_message="Inference timed out",
-            )
-            return Response({"error": "Inference timed out"}, status=status.HTTP_504_GATEWAY_TIMEOUT)
-
-        except InferenceClientError as e:
-            latency = (time.time() - start) * 1000
-            PredictionLog.objects.create(
-                uid=str(time.time()),
-                user=request.user,
-                model=model,
-                deployment=None,
+                deployment=deployment,
                 input_data=data,
                 output_data={},
                 latency_ms=latency,
                 status="ERROR",
-                error_message=str(e),
+                error_message="Upstream inference timed out",
             )
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Upstream inference timed out"}, status=status.HTTP_504_GATEWAY_TIMEOUT)
+
+        except requests.ConnectionError:
+            latency = (time.time() - start) * 1000
+            PredictionLog.objects.create(
+                uid=str(time.time()),
+                user=request.user,
+                model=model,
+                deployment=deployment,
+                input_data=data,
+                output_data={},
+                latency_ms=latency,
+                status="ERROR",
+                error_message="Upstream deployment unavailable",
+            )
+            return Response(
+                {"error": "Upstream deployment unavailable"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         except Exception as e:
             latency = (time.time() - start) * 1000
@@ -99,7 +105,7 @@ class PredictAPIView(APIView):
                 uid=str(time.time()),
                 user=request.user,
                 model=model,
-                deployment=None,
+                deployment=deployment,
                 input_data=data,
                 output_data={},
                 latency_ms=latency,
@@ -109,84 +115,17 @@ class PredictAPIView(APIView):
             error_msg = str(e) if settings.DEBUG else "Internal server error"
             return Response({"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+    def _forward_to_container(self, base_url: str, payload: dict):
+        timeout_seconds = int(getattr(settings, "INFERENCE_TIMEOUT_SECONDS", 15))
+        url = f"{base_url.rstrip('/')}/predict"
+        response = requests.post(url, json=payload, timeout=timeout_seconds)
 
+        if response.status_code >= 500:
+            raise requests.ConnectionError("Upstream container returned server error")
 
-def run_inference(model_path, data):
-    yaml_path = os.path.join(model_path, "model.yaml")
-    if not os.path.exists(yaml_path):
-        raise InferenceServerError("model.yaml not found")
-
-    with open(yaml_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    if not isinstance(config, dict):
-        raise InferenceServerError("Invalid YAML format")
-
-    runtime = config.get("runtime")
-    if not isinstance(runtime, dict):
-        raise InferenceServerError("runtime section missing in model.yaml")
-
-    artifacts = config.get("artifacts", {})
-
-    schema_path = os.path.join(model_path, "schema.json")
-    if os.path.exists(schema_path):
-        import jsonschema
-
-        with open(schema_path, "r") as f:
-            schema = json.load(f)
         try:
-            jsonschema.validate(instance=data, schema=schema)
-        except Exception as e:
-            raise InferenceClientError(f"Invalid input: {str(e)}")
+            data = response.json() if response.content else {}
+        except ValueError:
+            data = {"raw": response.text}
 
-    entry_point = runtime.get("entry_point")
-    if not entry_point:
-        raise InferenceServerError("runtime.entry_point missing")
-
-    if entry_point == "pipeline.py":
-        file_path = os.path.join(model_path, "pipeline.py")
-        if not os.path.exists(file_path):
-            raise InferenceServerError("pipeline.py not found")
-
-        spec = importlib.util.spec_from_file_location("pipeline", file_path)
-        if spec is None or spec.loader is None:
-            raise InferenceServerError("Failed to load pipeline.py")
-
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        func_name = runtime.get("predict_function", "predict")
-        if not hasattr(module, func_name):
-            raise InferenceServerError(f"{func_name} not found in pipeline.py")
-
-        return getattr(module, func_name)(data, model_path)
-
-    if entry_point == "pipeline.pkl":
-        file_name = artifacts.get("pipeline_file", "pipeline.pkl")
-        file_path = os.path.join(model_path, file_name)
-        if not os.path.exists(file_path):
-            raise InferenceServerError(f"{file_name} not found")
-
-        x = data.get("input")
-        if x is None:
-            raise InferenceClientError("Missing 'input' field")
-
-        obj = joblib.load(file_path)
-        return obj.predict([x]).tolist()
-
-    if entry_point == "model.pkl":
-        file_name = artifacts.get("model_file", "model.pkl")
-        file_path = os.path.join(model_path, file_name)
-        if not os.path.exists(file_path):
-            raise InferenceServerError(f"{file_name} not found")
-
-        x = data.get("input")
-        if x is None:
-            raise InferenceClientError("Missing 'input' field")
-
-        obj = joblib.load(file_path)
-        return obj.predict([x]).tolist()
-
-    raise InferenceServerError(f"Invalid entry_point: {entry_point}")
+        return data, response.status_code
