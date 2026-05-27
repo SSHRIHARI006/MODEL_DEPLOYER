@@ -1,58 +1,74 @@
 # Model Deployer
 
-Model Deployer is a backend platform for uploading, versioning, and serving machine learning models as API endpoints.
+## PROJECT VISION & OVERVIEW
 
-## Overview
+Model Deployer is a developer-first platform for deploying machine learning models as isolated API endpoints: a GitHub for ML models. It provides upload, versioning, deployment, and inference routing through secure, containerized runtimes while keeping the control plane simple and auditable.
 
-This project provides a structured system to manage the lifecycle of machine learning models, including upload, deployment, and inference. It is designed with a modular architecture to support future extensions such as containerized deployment, distributed inference, and monitoring.
+## ARCHITECTURE & INFRASTRUCTURE
 
-## Features
+**Tech stack**
 
-* Upload machine learning model packages
-* Version control for models
-* Deploy models as API endpoints
-* Track prediction logs and usage
-* API key-based access control
-* JWT-based authentication
-* DRF-based API architecture (APIView + serializers + permissions)
-* Integration testing with pytest
-* Admin panel for internal management
-* Monitoring APIs for platform and model usage
-* Health endpoint for service/database status checks
-* Scoped rate limiting for prediction traffic
-* Structured request logging with request IDs
-* Basic web dashboard for auth, model management, and inference checks
+- Django + Django REST Framework for the control plane and APIs.
+- PostgreSQL as the primary database (SQLite fallback for local development).
+- SimpleJWT for authentication.
+- Pytest for API and integration testing.
 
-## Tech Stack
+**Dynamic containerization**
 
-* Backend: Django, Django REST Framework
-* Database: PostgreSQL
-* Language: Python 3.12
-* Configuration: YAML
-* Testing: pytest, pytest-django
+The platform builds and runs model containers dynamically using the Docker SDK. The control plane uses [core/container_manager.py](core/container_manager.py) to:
 
-## Project Structure
+- Build images from user-provided artifacts via `build_image()`.
+- Ensure a shared `model_network` bridge network exists via `ensure_network()`.
+- Run containers in isolation with CPU/memory limits via `run_container()`.
+- Track container metadata (image name, container name/ID, internal URL) in the `Deployment` model.
 
-```
-MODEL_DEPLOYER/
-│
-├── users/                  # Custom user model and authentication
-├── api_keys/               # API key management
-├── model_registry/         # Model and version management
-├── deployments/            # Deployment lifecycle
-├── prediction_gateway/     # Inference endpoints
-├── monitoring/             # Logs and metrics
-├── webapp/                 # Basic frontend and templates
-├── runners/                # Runner abstraction (in progress)
-├── tests/                  # Integration tests
-├── conftest.py             # Shared pytest fixtures
-│
-├── config/                 # Django settings and routing
-├── templates/              # HTML templates
-├── manage.py
-```
+Inference traffic is proxied from the API gateway to the container internal URL (for example, `http://model_<deployment_id>:5000/predict`). The deployment lifecycle is tracked in [deployments/models.py](deployments/models.py) with a guarded state machine.
 
-## Setup
+## CORE API DESIGN
+
+**Authentication**
+
+- `POST /api/auth/register/` — Register user
+- `POST /api/auth/login/` — Obtain JWT access/refresh tokens
+- `POST /api/auth/refresh/` — Refresh access token
+
+**Model registry**
+
+- `POST /api/models/upload/` — Upload a model package (JWT required)
+
+**API keys**
+
+- `GET /api/keys/` — List API keys for current user
+- `POST /api/keys/` — Create API key for owned model
+- `POST /api/keys/<key_id>/deactivate/` — Deactivate API key
+
+**Deployments**
+
+- `POST /api/deployments/` — Create a deployment (async build/run; returns 202)
+- `GET /api/deployments/<deployment_id>/` — Deployment status/details
+
+**Prediction gateway**
+
+- `POST /api/predict/<model_id>/` — Run inference (requires BOTH JWT + `X-API-Key`)
+
+**Monitoring**
+
+- `GET /api/metrics/overview/` — Global usage and performance overview
+- `GET /api/metrics/model/<model_id>/` — Per-model usage and performance
+- `GET /api/metrics/dashboard/summary/` — Dashboard summary counters
+- `GET /api/metrics/dashboard/recent/` — Recent prediction activity
+- `GET /api/metrics/dashboard/models/` — User model list with quick stats
+- `GET /api/metrics/health/` — Service health (includes DB check)
+
+**Prediction flow**
+
+1. Client sends `POST /api/predict/<model_id>/` with JWT + `X-API-Key`.
+2. API gateway selects the latest RUNNING deployment for the model.
+3. Payload is proxied to the deployment container `/predict` endpoint.
+4. Response is returned to client and a `PredictionLog` is persisted.
+5. Gateway maps upstream errors to HTTP 502/503/504.
+
+## LOCAL SETUP & TESTING
 
 ### 1. Clone the repository
 
@@ -82,7 +98,7 @@ uv sync
 
 ### 4. Configure database
 
-Use environment variables (recommended). Copy `.env.example` to `.env` and set values.
+Copy `.env.example` to `.env` and set values.
 
 ### 5. Run migrations
 
@@ -110,98 +126,27 @@ pytest -v --ds=config.settings_test
 pytest --cov=. --cov-report=term-missing --ds=config.settings_test
 ```
 
----
+**Docker requirement**
 
-## API Endpoints (Current)
+For deployments and container builds, Docker must be installed and running on the host machine. The control plane uses the Docker SDK to build images and run containers.
 
-Authentication:
-* `POST /api/auth/register/` — Register user
-* `POST /api/auth/login/` — Obtain JWT access/refresh tokens
-* `POST /api/auth/refresh/` — Refresh access token
+## CURRENT STATUS & TECHNICAL DEBT
 
-Model Registry:
-* `POST /api/models/upload/` — Upload model package (authenticated)
+- The deployment state machine and container proxy routing are implemented.
+- The system currently does not verify container readiness (health checks) before routing traffic. A readiness probe should be added before marking a deployment as RUNNING.
 
-API Keys:
-* `GET /api/keys/` — List API keys for current user
-* `POST /api/keys/` — Create API key for owned model
-* `POST /api/keys/<key_id>/deactivate/` — Deactivate API key
+## THE ROADMAP
 
-Prediction Gateway:
-* `POST /api/predict/<model_id>/` — Run inference (JWT + X-API-Key)
+**Short-term**
 
-Monitoring:
-* `GET /api/metrics/overview/` — Global usage and performance overview
-* `GET /api/metrics/model/<model_id>/` — Per-model usage and performance
-* `GET /api/metrics/dashboard/summary/` — Dashboard summary counters
-* `GET /api/metrics/dashboard/recent/` — Recent prediction activity
-* `GET /api/metrics/dashboard/models/` — User model list with quick stats
-* `GET /api/metrics/health/` — Service health (includes DB check)
+- Containerize the Django/PostgreSQL control plane with `docker-compose.yml`.
 
----
+**Mid-term**
 
-## Testing
+- Implement `runners` adapters (scikit-learn, TensorFlow, PyTorch) to support framework-agnostic deployments.
 
-The project uses app-level tests and integration tests:
+**Long-term**
 
-* `authentication/tests/`
-* `api_keys/tests/`
-* `model_registry/tests/`
-* `prediction_gateway/tests/`
-* `monitoring/tests/`
-* `tests/integration/`
-
-All tests currently pass with end-to-end flow coverage for:
-
-* User registration and login
-* Model upload
-* API key creation
-* Prediction request lifecycle
-
-Quick scripts for manual verification:
-
-* `scripts/e2e_smoke.sh` — happy-path API flow
-* `scripts/e2e_negative.sh` — negative cases + predict rate-limit checks
-
----
-
-## Current Status
-
-## Phase 1 Completed
-
-Phase 1 is complete for the initial model deployment platform scope.
-
-Completed scope:
-
-The project currently includes:
-
-* Database schema and relationships
-* DRF migration for core API endpoints
-* JWT authentication + API key authorization
-* Model upload validation and safe extraction checks
-* Prediction logging with success/error tracking
-* Monitoring and dashboard APIs
-* Basic web frontend pages (auth, dashboard, model detail)
-* Health checks, request logging, and prediction throttling
-* Automated API and integration test suite
-
----
-
-## Future Work
-
-* Runner abstraction completion for multiple ML frameworks
-* Docker-based isolated execution for model runtimes
-* Support for sklearn, TensorFlow, PyTorch, transformers, and RAG flows
-
-## Environment Notes
-
-By default, PostgreSQL is used when `POSTGRES_PASSWORD` is set.
-For local/dev fallback with minimal setup, enable SQLite:
-
-* `DJANGO_USE_SQLITE=true`
-
----
-
-## License
-
-This project is for educational and development purposes.
+- Production deployment on bare-metal VPS with Traefik/Nginx.
+- Prometheus observability and structured service metrics.
+- Integration with an autonomous AIOps/DevOps management agent.
