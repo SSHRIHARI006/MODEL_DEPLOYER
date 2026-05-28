@@ -49,7 +49,9 @@ def test_metrics_overview_aggregates(auth_client, user, model_obj):
     assert res.data["p95_latency_ms"] == pytest.approx(100.0, abs=0.01)
 
 
-def test_model_metrics_only_owner_data(auth_client, user, model_obj, user2, model_obj_user2):
+def test_model_metrics_only_owner_data(
+    auth_client, user, model_obj, user2, model_obj_user2
+):
     _create_log(user=user, model=model_obj, status="SUCCESS", latency=120)
     _create_log(user=user2, model=model_obj_user2, status="SUCCESS", latency=999)
 

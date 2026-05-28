@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import time
 
 from django.db import transaction
 from django.utils import timezone
 
-from core import container_manager
+from runners.factory import RunnerFactory
 
 from .models import Deployment
 
@@ -19,40 +20,56 @@ def start_deployment_async(deployment_id: str):
 
 
 def _build_and_run_deployment(deployment_id: str):
-    deployment = Deployment.objects.select_related("model_version").get(id=deployment_id)
+    deployment = Deployment.objects.select_related("model_version").get(
+        id=deployment_id
+    )
 
     try:
         with transaction.atomic():
             deployment.transition_to(Deployment.Status.BUILDING)
             deployment.last_error = None
             deployment.build_logs = None
-            deployment.save(update_fields=["status", "last_error", "build_logs", "updated_at"])
+            deployment.save(
+                update_fields=["status", "last_error", "build_logs", "updated_at"]
+            )
 
         build_path = Path(deployment.model_version.artifact_path)
         if not build_path.exists() or not build_path.is_dir():
-            raise RuntimeError("Build context directory does not exist")
+            raise RuntimeError("Model artifact path does not exist")
 
-        image_name, build_logs = container_manager.build_image(
-            deployment_id=str(deployment.id),
-            build_context_path=str(build_path),
-            image_name=f"model-deployment:{deployment.id}",
-        )
+        model = deployment.model_version.model
+        runner = RunnerFactory.get_runner(framework=model.framework)
 
-        container = container_manager.run_container(
-            image_name=image_name,
-            deployment_id=str(deployment.id),
-            network_name="model_network",
-            internal_port=5000,
+        manifest_path = build_path / "model.yaml"
+        init_result = runner.init_environment(
+            {
+                "model_id": str(model.id),
+                "manifest_path": str(manifest_path),
+            }
         )
+        if init_result.status_code >= 400:
+            raise RuntimeError(init_result.data)
+
+        deadline = time.time() + 60
+        health_ok = False
+        while time.time() < deadline:
+            health_result = runner.healthcheck()
+            if health_result.status_code == 200:
+                health_ok = True
+                break
+            time.sleep(0.5)
+
+        if not health_ok:
+            raise RuntimeError("Runner healthcheck timed out")
 
         deployment.refresh_from_db()
         deployment.transition_to(Deployment.Status.RUNNING)
-        deployment.image_name = image_name
-        deployment.container_name = container.name
-        deployment.container_id = container.id
-        deployment.internal_url = f"http://{container.name}:5000"
-        deployment.endpoint_url = deployment.internal_url
-        deployment.build_logs = build_logs[-12000:] if build_logs else None
+        deployment.image_name = None
+        deployment.container_name = None
+        deployment.container_id = None
+        deployment.internal_url = runner.base_url
+        deployment.endpoint_url = None
+        deployment.build_logs = None
         deployment.started_at = timezone.now()
         deployment.save(
             update_fields=[

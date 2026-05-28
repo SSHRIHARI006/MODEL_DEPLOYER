@@ -16,7 +16,9 @@ class DeploymentCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Model version not found") from exc
 
         if model_version.model.owner_id != user.id:
-            raise serializers.ValidationError("You can deploy only your own model versions")
+            raise serializers.ValidationError(
+                "You can deploy only your own model versions"
+            )
 
         return value
 

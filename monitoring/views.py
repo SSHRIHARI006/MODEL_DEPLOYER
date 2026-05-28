@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api_keys.models import APIKey
+from deployments.models import Deployment
 from model_registry.models import Model
 from prediction_gateway.models import PredictionLog
 
@@ -69,7 +70,9 @@ class MetricsOverviewAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        logs = list(PredictionLog.objects.filter(user=request.user).order_by("-created_at"))
+        logs = list(
+            PredictionLog.objects.filter(user=request.user).order_by("-created_at")
+        )
         return Response(_compute_metrics(logs))
 
 
@@ -79,13 +82,38 @@ class ModelMetricsAPIView(APIView):
     def get(self, request, model_id):
         model = get_object_or_404(Model, id=model_id, owner=request.user)
         logs = list(
-            PredictionLog.objects.filter(user=request.user, model=model).order_by("-created_at")
+            PredictionLog.objects.filter(user=request.user, model=model).order_by(
+                "-created_at"
+            )
         )
         data = _compute_metrics(logs)
+        latest_version = model.versions.order_by("-created_at").first()
+        latest_deployment = None
+        if latest_version:
+            latest_deployment = (
+                Deployment.objects.filter(model_version=latest_version)
+                .order_by("-created_at")
+                .first()
+            )
         data.update(
             {
                 "model_id": str(model.id),
                 "model_name": model.name,
+                "framework": model.framework,
+                "latest_version": latest_version.version if latest_version else None,
+                "latest_version_id": str(latest_version.id) if latest_version else None,
+                "latest_deployment_status": latest_deployment.status
+                if latest_deployment
+                else "NOT_DEPLOYED",
+                "latest_deployment_id": str(latest_deployment.id)
+                if latest_deployment
+                else None,
+                "latest_deployment_error": latest_deployment.last_error
+                if latest_deployment
+                else None,
+                "latest_deployment_logs": latest_deployment.build_logs
+                if latest_deployment
+                else None,
             }
         )
         return Response(data)
@@ -95,7 +123,9 @@ class DashboardSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        logs = list(PredictionLog.objects.filter(user=request.user).order_by("-created_at"))
+        logs = list(
+            PredictionLog.objects.filter(user=request.user).order_by("-created_at")
+        )
         metrics = _compute_metrics(logs)
 
         day_ago = timezone.now() - timezone.timedelta(days=1)
@@ -108,7 +138,9 @@ class DashboardSummaryAPIView(APIView):
             {
                 "metrics": metrics,
                 "model_count": Model.objects.filter(owner=request.user).count(),
-                "active_api_keys": APIKey.objects.filter(user=request.user, is_active=True).count(),
+                "active_api_keys": APIKey.objects.filter(
+                    user=request.user, is_active=True
+                ).count(),
                 "recent_requests_24h": recent_requests_24h,
             }
         )
@@ -155,7 +187,9 @@ class DashboardModelsAPIView(APIView):
         model_ids = [model.id for model in models]
 
         logs = list(
-            PredictionLog.objects.filter(user=request.user, model_id__in=model_ids).order_by("-created_at")
+            PredictionLog.objects.filter(
+                user=request.user, model_id__in=model_ids
+            ).order_by("-created_at")
         )
 
         logs_by_model = defaultdict(list)
@@ -169,13 +203,32 @@ class DashboardModelsAPIView(APIView):
             latest_version = model.versions.order_by("-created_at").first()
             last_prediction_at = model_logs[0].created_at if model_logs else None
 
+            latest_deployment = None
+            if latest_version:
+                latest_deployment = (
+                    Deployment.objects.filter(model_version=latest_version)
+                    .order_by("-created_at")
+                    .first()
+                )
+
             items.append(
                 {
                     "model_id": str(model.id),
                     "model_name": model.name,
                     "framework": model.framework,
                     "task_type": model.task_type,
-                    "latest_version": latest_version.version if latest_version else None,
+                    "latest_version": latest_version.version
+                    if latest_version
+                    else None,
+                    "latest_version_id": str(latest_version.id)
+                    if latest_version
+                    else None,
+                    "latest_deployment_status": latest_deployment.status
+                    if latest_deployment
+                    else "NOT_DEPLOYED",
+                    "latest_deployment_id": str(latest_deployment.id)
+                    if latest_deployment
+                    else None,
                     "last_prediction_at": last_prediction_at,
                     **metrics,
                 }

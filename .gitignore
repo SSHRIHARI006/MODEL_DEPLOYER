@@ -94,12 +94,13 @@ uploads/
 tmp/
 temp/
 
-model.yaml
-model.py
-pipeline.py
-schema.json
-model.pkl
+/model.yaml
+/model.py
+/pipeline.py
+/schema.json
+/model.pkl
 
 # Django migrations
 **/migrations/
 !**/migrations/__init__.py
+

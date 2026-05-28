@@ -25,7 +25,9 @@ def test_dashboard_summary_requires_auth(api_client):
     assert res.status_code == 401
 
 
-def test_dashboard_summary_returns_expected_fields(auth_client, user, model_obj, api_key):
+def test_dashboard_summary_returns_expected_fields(
+    auth_client, user, model_obj, api_key
+):
     _create_log(user=user, model=model_obj, status="SUCCESS", latency=100)
 
     res = auth_client.get("/api/metrics/dashboard/summary/")
@@ -38,7 +40,9 @@ def test_dashboard_summary_returns_expected_fields(auth_client, user, model_obj,
     assert res.data["active_api_keys"] >= 1
 
 
-def test_dashboard_recent_predictions_scopes_to_user(auth_client, user, model_obj, user2, model_obj_user2):
+def test_dashboard_recent_predictions_scopes_to_user(
+    auth_client, user, model_obj, user2, model_obj_user2
+):
     _create_log(user=user, model=model_obj, status="SUCCESS", latency=100)
     _create_log(user=user, model=model_obj, status="ERROR", latency=150)
     _create_log(user=user2, model=model_obj_user2, status="SUCCESS", latency=999)

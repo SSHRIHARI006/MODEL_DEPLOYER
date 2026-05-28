@@ -1,0 +1,6 @@
+name: test_model_v1
+framework: sklearn
+python_version: "3.12"
+requirements: requirements.txt
+model_artifact: model.pkl
+task_type: regression

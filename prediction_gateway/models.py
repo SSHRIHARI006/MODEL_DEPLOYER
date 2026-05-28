@@ -4,6 +4,7 @@ from model_registry.models import Model
 from deployments.models import Deployment
 import uuid
 
+
 class PredictionLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -26,7 +27,7 @@ class PredictionLog(models.Model):
             ("SUCCESS", "SUCCESS"),
             ("ERROR", "ERROR"),
         ],
-        default="SUCCESS"
+        default="SUCCESS",
     )
 
     error_message = models.TextField(blank=True, null=True)

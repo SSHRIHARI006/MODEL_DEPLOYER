@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import pytest
 from api_keys.models import APIKey
 
@@ -5,13 +6,17 @@ pytestmark = pytest.mark.django_db
 
 
 def test_create_api_key_for_own_model(auth_client, model_obj):
-    res = auth_client.post("/api/keys/", {"model_id": model_obj.id, "name": "k1"}, format="json")
+    res = auth_client.post(
+        "/api/keys/", {"model_id": model_obj.id, "name": "k1"}, format="json"
+    )
     assert res.status_code == 201
     assert "key" in res.data
 
 
 def test_create_api_key_for_other_user_model_forbidden(auth_client, model_obj_user2):
-    res = auth_client.post("/api/keys/", {"model_id": model_obj_user2.id, "name": "bad"}, format="json")
+    res = auth_client.post(
+        "/api/keys/", {"model_id": model_obj_user2.id, "name": "bad"}, format="json"
+    )
     assert res.status_code in (403, 404)
 
 

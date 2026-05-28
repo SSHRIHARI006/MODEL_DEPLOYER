@@ -4,7 +4,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from deployments.models import Deployment
-from model_registry.models import Model
+from runners.base import RunnerResult
 
 pytestmark = pytest.mark.django_db
 
@@ -18,15 +18,14 @@ def _zip_bytes(files: dict[str, str]) -> bytes:
 
 
 def test_full_flow_register_login_upload_key_predict(api_client, monkeypatch):
-    class DummyResponse:
-        status_code = 200
-        content = b"{}"
+    class DummyRunner:
+        def predict(self, payload):
+            return RunnerResult(status_code=200, data={"predictions": [9.99]})
 
-        @staticmethod
-        def json():
-            return {"prediction": [9.99]}
-
-    monkeypatch.setattr("prediction_gateway.views.requests.post", lambda *args, **kwargs: DummyResponse())
+    monkeypatch.setattr(
+        "prediction_gateway.views.RunnerFactory.get_runner",
+        lambda framework: DummyRunner(),
+    )
 
     reg = api_client.post(
         "/api/auth/register/",
@@ -45,37 +44,35 @@ def test_full_flow_register_login_upload_key_predict(api_client, monkeypatch):
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     yaml_content = """
-model:
-  name: test_model
-  framework: sklearn
-  task: regression
-runtime:
-  entry_point: pipeline.py
-  predict_function: predict
-artifacts:
-  model_file: model.pkl
+name: test_model
+framework: sklearn
+python_version: "3.12"
+requirements: requirements.txt
+model_artifact: model.pkl
+task_type: regression
 """.strip()
 
     data = _zip_bytes(
         {
             "model.yaml": yaml_content,
-            "pipeline.py": "def predict(data, model_path):\n    return [1]\n",
-            "schema.json": '{"type":"object","properties":{"input":{"type":"array"}},"required":["input"]}',
+            "requirements.txt": "scikit-learn==1.8.0\n",
+            "model.pkl": "dummy-model",
         }
     )
     upload = SimpleUploadedFile("bundle.zip", data, content_type="application/zip")
     up = api_client.post("/api/models/upload/", {"file": upload}, format="multipart")
     assert up.status_code == 201
     model_id = up.data["model_id"]
+    model_version_id = up.data["model_version_id"]
 
-    key_res = api_client.post("/api/keys/", {"model_id": model_id, "name": "flow-key"}, format="json")
+    key_res = api_client.post(
+        "/api/keys/", {"model_id": model_id, "name": "flow-key"}, format="json"
+    )
     assert key_res.status_code == 201
     api_key = key_res.data["key"]
 
-    model = Model.objects.get(id=model_id)
-    version = model.versions.order_by("-created_at").first()
     Deployment.objects.create(
-        model_version=version,
+        model_version_id=model_version_id,
         status=Deployment.Status.RUNNING,
         internal_url="http://model_test:5000",
     )
@@ -84,6 +81,10 @@ artifacts:
         HTTP_AUTHORIZATION=f"Bearer {token}",
         HTTP_X_API_KEY=api_key,
     )
-    pred = api_client.post(f"/api/predict/{model_id}/", {"input": [4]}, format="json")
+    pred = api_client.post(
+        f"/api/predict/{model_id}/",
+        {"instances": [{"feature_a": 1.2, "feature_b": 0.5}]},
+        format="json",
+    )
     assert pred.status_code == 200
-    assert "prediction" in pred.data
+    assert "predictions" in pred.data

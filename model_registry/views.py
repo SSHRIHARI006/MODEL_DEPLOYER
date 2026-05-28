@@ -1,4 +1,3 @@
-import os
 import shutil
 import uuid
 import zipfile
@@ -28,7 +27,10 @@ class ModelUploadAPIView(APIView):
         upload_file = serializer.validated_data["file"]
 
         if upload_file.size > settings.MAX_MODEL_ZIP_BYTES:
-            return Response({"error": "Uploaded zip exceeds max allowed size"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Uploaded zip exceeds max allowed size"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         model_id = str(uuid.uuid4())
         model_root = BASE_STORAGE / model_id
@@ -65,49 +67,39 @@ class ModelUploadAPIView(APIView):
             if not isinstance(config, dict):
                 raise ValueError("model.yaml must contain a valid object")
 
-            model_cfg = config.get("model")
-            runtime = config.get("runtime")
-            artifacts = config.get("artifacts")
+            framework = config.get("framework")
+            python_version = config.get("python_version")
+            requirements = config.get("requirements")
+            model_artifact = config.get("model_artifact")
+            model_name = config.get("name") or f"model-{model_id[:8]}"
+            task_type = config.get("task_type") or "unknown"
 
-            if not isinstance(model_cfg, dict):
-                raise ValueError("model section missing")
-            for field in ["name", "framework", "task"]:
-                if field not in model_cfg:
-                    raise ValueError(f"model.{field} missing")
+            if not framework:
+                raise ValueError("framework missing")
+            if not python_version:
+                raise ValueError("python_version missing")
+            if not requirements:
+                raise ValueError("requirements missing")
+            if not model_artifact:
+                raise ValueError("model_artifact missing")
 
-            if not isinstance(runtime, dict):
-                raise ValueError("runtime section missing")
-            entry_point = runtime.get("entry_point")
-            if not entry_point:
-                raise ValueError("runtime.entry_point missing")
+            requirements_path = version_path / requirements
+            if not requirements_path.exists():
+                raise ValueError("requirements file not found")
 
-            if not isinstance(artifacts, dict):
-                raise ValueError("artifacts section missing")
-
-            # Validate required artifact files by runtime entry point
-            if entry_point == "pipeline.py":
-                if not (version_path / "pipeline.py").exists():
-                    raise ValueError("pipeline.py not found")
-            elif entry_point == "pipeline.pkl":
-                pipeline_file = artifacts.get("pipeline_file", "pipeline.pkl")
-                if not (version_path / pipeline_file).exists():
-                    raise ValueError(f"{pipeline_file} not found")
-            elif entry_point == "model.pkl":
-                model_file = artifacts.get("model_file", "model.pkl")
-                if not (version_path / model_file).exists():
-                    raise ValueError(f"{model_file} not found")
-            else:
-                raise ValueError(f"Invalid runtime.entry_point: {entry_point}")
+            artifact_path = version_path / model_artifact
+            if not artifact_path.exists():
+                raise ValueError("model artifact not found")
 
             model = Model.objects.create(
                 id=model_id,
-                name=model_cfg["name"],
-                framework=model_cfg["framework"],
-                task_type=model_cfg["task"],
+                name=model_name,
+                framework=framework,
+                task_type=task_type,
                 owner=request.user,
             )
 
-            ModelVersion.objects.create(
+            version_obj = ModelVersion.objects.create(
                 model=model,
                 version=version,
                 artifact_path=str(version_path),
@@ -115,11 +107,38 @@ class ModelUploadAPIView(APIView):
             )
 
             return Response(
-                {"message": "Model uploaded successfully", "model_id": model_id, "version": version},
+                {
+                    "message": "Model uploaded successfully",
+                    "model_id": model_id,
+                    "model_version_id": str(version_obj.id),
+                    "version": version,
+                },
                 status=status.HTTP_201_CREATED,
             )
 
         except Exception as e:
             if model_root.exists():
                 shutil.rmtree(model_root)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ModelDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, model_id):
+        try:
+            model = Model.objects.get(id=model_id, owner=request.user)
+            # Safe deletion of local model storage root
+            model_root = BASE_STORAGE / model_id
+            if model_root.exists():
+                shutil.rmtree(model_root)
+            model.delete()
+            return Response(
+                {"message": "Model deleted successfully"}, status=status.HTTP_200_OK
+            )
+        except Model.DoesNotExist:
+            return Response(
+                {"error": "Model not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -11,35 +11,59 @@ from .services import start_deployment_async
 
 
 class DeploymentCreateAPIView(APIView):
-	permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
-	def post(self, request):
-		serializer = DeploymentCreateSerializer(data=request.data, context={"request": request})
-		serializer.is_valid(raise_exception=True)
+    def get(self, request):
+        queryset = Deployment.objects.select_related("model_version__model").filter(
+            model_version__model__owner=request.user
+        )
+        model_id = request.query_params.get("model_id")
+        if model_id:
+            queryset = queryset.filter(model_version__model_id=model_id)
 
-		model_version = ModelVersion.objects.select_related("model").get(
-			id=serializer.validated_data["model_version_id"]
-		)
+        queryset = queryset.order_by("-created_at")
+        serializer = DeploymentSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-		deployment = Deployment.objects.create(
-			model_version=model_version,
-			status=Deployment.Status.PENDING,
-			runtime_type="container",
-		)
-		start_deployment_async(str(deployment.id))
+    def post(self, request):
+        serializer = DeploymentCreateSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
 
-		return Response(DeploymentSerializer(deployment).data, status=status.HTTP_202_ACCEPTED)
+        model_version = ModelVersion.objects.select_related("model").get(
+            id=serializer.validated_data["model_version_id"]
+        )
+
+        deployment = Deployment.objects.create(
+            model_version=model_version,
+            status=Deployment.Status.PENDING,
+            runtime_type="container",
+        )
+        start_deployment_async(str(deployment.id))
+
+        return Response(
+            DeploymentSerializer(deployment).data, status=status.HTTP_202_ACCEPTED
+        )
 
 
 class DeploymentDetailAPIView(APIView):
-	permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
-	def get(self, request, deployment_id):
-		deployment = Deployment.objects.select_related("model_version__model").filter(
-			id=deployment_id,
-			model_version__model__owner=request.user,
-		).first()
-		if not deployment:
-			return Response({"error": "Deployment not found"}, status=status.HTTP_404_NOT_FOUND)
+    def get(self, request, deployment_id):
+        deployment = (
+            Deployment.objects.select_related("model_version__model")
+            .filter(
+                id=deployment_id,
+                model_version__model__owner=request.user,
+            )
+            .first()
+        )
+        if not deployment:
+            return Response(
+                {"error": "Deployment not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
-		return Response(DeploymentSerializer(deployment).data, status=status.HTTP_200_OK)
+        return Response(
+            DeploymentSerializer(deployment).data, status=status.HTTP_200_OK
+        )

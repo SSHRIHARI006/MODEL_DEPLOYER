@@ -19,7 +19,9 @@ def ensure_network(network_name: str = "model_network"):
     return client.networks.create(network_name, driver="bridge")
 
 
-def build_image(deployment_id: str, build_context_path: str, image_name: str | None = None) -> tuple[str, str]:
+def build_image(
+    deployment_id: str, build_context_path: str, image_name: str | None = None
+) -> tuple[str, str]:
     client = _docker_client()
     tag = image_name or f"model-deployment:{deployment_id}"
 
