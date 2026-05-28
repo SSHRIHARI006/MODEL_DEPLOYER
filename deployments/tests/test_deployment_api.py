@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+# pyrefly: ignore [missing-import]
 import pytest
 
 from deployments.models import Deployment
