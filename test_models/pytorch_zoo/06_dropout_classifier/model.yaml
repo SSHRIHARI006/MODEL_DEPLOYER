@@ -1,0 +1,11 @@
+name: 06_dropout_classifier
+framework: pytorch
+python_version: '3.12'
+requirements: requirements.txt
+model_artifact: model.pt
+task_type: classification
+device: cpu
+load_method: state_dict
+model_class_file: model_architecture.py
+model_class_name: DropoutClassifier
+input_type: tabular

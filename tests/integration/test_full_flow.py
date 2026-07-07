@@ -29,7 +29,7 @@ def test_full_flow_register_login_upload_key_predict(api_client, monkeypatch):
 
     reg = api_client.post(
         "/api/auth/register/",
-        {"email": "flow@example.com", "password": "TestPass123!"},
+        {"email": "flow@example.com", "username": "flowuser", "password": "TestPass123!"},
         format="json",
     )
     assert reg.status_code in (200, 201)

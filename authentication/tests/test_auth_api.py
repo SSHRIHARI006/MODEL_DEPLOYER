@@ -6,7 +6,7 @@ pytestmark = pytest.mark.django_db
 def test_register_success(api_client):
     res = api_client.post(
         "/api/auth/register/",
-        {"email": "new@example.com", "password": "TestPass123!"},
+        {"email": "new@example.com", "username": "newuser", "password": "TestPass123!"},
         format="json",
     )
     assert res.status_code in (200, 201)
@@ -16,12 +16,12 @@ def test_register_success(api_client):
 def test_register_duplicate_email(api_client):
     api_client.post(
         "/api/auth/register/",
-        {"email": "dup@example.com", "password": "TestPass123!"},
+        {"email": "dup@example.com", "username": "dupuser", "password": "TestPass123!"},
         format="json",
     )
     res = api_client.post(
         "/api/auth/register/",
-        {"email": "dup@example.com", "password": "TestPass123!"},
+        {"email": "dup@example.com", "username": "dupuser", "password": "TestPass123!"},
         format="json",
     )
     assert res.status_code == 400
@@ -30,7 +30,7 @@ def test_register_duplicate_email(api_client):
 def test_login_success(api_client):
     api_client.post(
         "/api/auth/register/",
-        {"email": "login@example.com", "password": "TestPass123!"},
+        {"email": "login@example.com", "username": "loginuser", "password": "TestPass123!"},
         format="json",
     )
     res = api_client.post(
@@ -46,7 +46,7 @@ def test_login_success(api_client):
 def test_login_wrong_password(api_client):
     api_client.post(
         "/api/auth/register/",
-        {"email": "wrong@example.com", "password": "TestPass123!"},
+        {"email": "wrong@example.com", "username": "wronguser", "password": "TestPass123!"},
         format="json",
     )
     res = api_client.post(

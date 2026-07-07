@@ -38,6 +38,7 @@ SIMPLE_JWT = {
 MAX_MODEL_ZIP_BYTES = int(os.getenv("MAX_MODEL_ZIP_BYTES", 50 * 1024 * 1024))  # 50 MB
 INFERENCE_TIMEOUT_SECONDS = int(os.getenv("INFERENCE_TIMEOUT_SECONDS", 15))
 RUNNER_SKLEARN_URL = os.getenv("RUNNER_SKLEARN_URL", "http://runner-sklearn:8000")
+RUNNER_PYTORCH_URL = os.getenv("RUNNER_PYTORCH_URL", "http://runner-pytorch:8000")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -47,13 +48,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "users",
     "api_keys",
     "model_registry",
     "deployments",
     "prediction_gateway",
     "monitoring",
-    "webapp",
+    "billing",
     "authentication",
 ]
 
@@ -61,6 +63,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "core.middleware.RequestIDMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -126,6 +129,14 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 AUTH_USER_MODEL = "users.User"
+
+# CORS — allow the React dev server
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
 
 LOGGING = {
     "version": 1,

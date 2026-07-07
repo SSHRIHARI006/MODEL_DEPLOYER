@@ -41,8 +41,9 @@ def _run_cmd(cmd: list[str]) -> tuple[int, str, str, float]:
 
 def _ensure_within_root(path: Path, root: Path) -> None:
     resolved = path.resolve()
+    resolved_root = root.resolve()
     try:
-        resolved.relative_to(root)
+        resolved.relative_to(resolved_root)
     except ValueError as exc:
         raise HTTPException(
             status_code=400, detail="Path escapes storage root"
@@ -65,7 +66,7 @@ def init_model(req: InitModelRequest):
     env_dir = ENVS_ROOT / req.model_id
     env_dir.mkdir(parents=True, exist_ok=True)
 
-    venv_cmd = ["uv", "venv", str(env_dir)]
+    venv_cmd = ["uv", "venv", "--system-site-packages", str(env_dir)]
     code, out, err, duration_ms = _run_cmd(venv_cmd)
     if code != 0:
         raise HTTPException(
@@ -110,6 +111,12 @@ def init_model(req: InitModelRequest):
     return {"status": "ready", "venv_ms": duration_ms, "pip_ms": pip_ms}
 
 
+BRIDGE_MAP = {
+    "sklearn": "worker_bridge.py",
+    "pytorch": "pytorch_bridge.py",
+}
+
+
 @app.post("/predict")
 def predict(req: PredictRequest):
     manifest_path = Path(req.manifest_path)
@@ -123,9 +130,25 @@ def predict(req: PredictRequest):
     if not python_bin.exists():
         raise HTTPException(status_code=400, detail="environment not initialized")
 
-    bridge_path = Path(__file__).resolve().parent / "worker_bridge.py"
+    # Determine framework from manifest to select the correct bridge
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text())
+    except yaml.YAMLError as exc:
+        raise HTTPException(
+            status_code=400, detail="manifest is not valid yaml"
+        ) from exc
+
+    framework = manifest.get("framework", "sklearn") if isinstance(manifest, dict) else "sklearn"
+    bridge_name = BRIDGE_MAP.get(framework)
+
+    if not bridge_name:
+        raise HTTPException(
+            status_code=400, detail=f"unsupported framework: {framework}"
+        )
+
+    bridge_path = Path(__file__).resolve().parent / bridge_name
     if not bridge_path.exists():
-        raise HTTPException(status_code=500, detail="bridge script missing")
+        raise HTTPException(status_code=500, detail=f"bridge script missing: {bridge_name}")
 
     cmd = [str(python_bin), str(bridge_path), str(manifest_path)]
     payload = {"instances": req.instances}

@@ -15,10 +15,19 @@ class Model(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="models"
     )
 
+    # Marketplace fields
+    is_public = models.BooleanField(default=False)
+    cost_per_run = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+    description = models.TextField(blank=True, default="")
+    readme_markdown = models.TextField(blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ("owner", "name")
+
     def __str__(self):
-        return self.name
+        return f"{self.owner.username}/{self.name}"
 
 
 class ModelVersion(models.Model):

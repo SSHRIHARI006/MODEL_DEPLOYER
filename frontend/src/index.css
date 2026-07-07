@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* ── GitHub-Vibe Design Tokens ─────────────────────────────── */
+:root {
+  --color-bg:         #f6f8fa;
+  --color-surface:    #ffffff;
+  --color-border:     #d0d7de;
+  --color-text:       #24292f;
+  --color-text-muted: #57606a;
+  --color-accent:     #0969da;
+  --color-cta:        #2da44e;
+  --color-cta-hover:  #2c974b;
+  --color-danger:     #cf222e;
+  --color-terminal:   #0d1117;
+  --color-terminal-text: #c9d1d9;
+  --radius:           6px;
+  --font-mono:        "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--color-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, .font-mono { font-family: var(--font-mono); }

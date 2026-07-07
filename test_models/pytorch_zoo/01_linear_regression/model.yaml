@@ -1,0 +1,11 @@
+name: 01_linear_regression
+framework: pytorch
+python_version: '3.12'
+requirements: requirements.txt
+model_artifact: model.pt
+task_type: regression
+device: cpu
+load_method: state_dict
+model_class_file: model_architecture.py
+model_class_name: LinearRegression
+input_type: tabular

@@ -15,12 +15,16 @@ def api_client():
 
 @pytest.fixture
 def user(db):
-    return User.objects.create_user(email="test@example.com", password="TestPass123!")
+    return User.objects.create_user(
+        email="test@example.com", username="testuser", password="TestPass123!"
+    )
 
 
 @pytest.fixture
 def user2(db):
-    return User.objects.create_user(email="other@example.com", password="TestPass123!")
+    return User.objects.create_user(
+        email="other@example.com", username="otheruser", password="TestPass123!"
+    )
 
 
 @pytest.fixture

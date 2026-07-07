@@ -1,0 +1,11 @@
+name: 12_relu_tower
+framework: pytorch
+python_version: '3.12'
+requirements: requirements.txt
+model_artifact: model.pt
+task_type: regression
+device: cpu
+load_method: state_dict
+model_class_file: model_architecture.py
+model_class_name: ReLUTower
+input_type: tabular

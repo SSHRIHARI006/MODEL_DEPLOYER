@@ -3,7 +3,14 @@ from django.contrib.auth.models import (
     PermissionsMixin,
     BaseUserManager,
 )
+from django.core.validators import RegexValidator
 from django.db import models
+
+
+username_validator = RegexValidator(
+    regex=r"^[a-zA-Z0-9_-]+$",
+    message="Username may only contain letters, numbers, hyphens, and underscores.",
+)
 
 
 class UserManager(BaseUserManager):
@@ -33,6 +40,14 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
+    username = models.CharField(
+        max_length=39,
+        unique=True,
+        validators=[username_validator],
+        help_text="Public namespace handle (e.g. @username).",
+    )
+    bio = models.TextField(blank=True, default="")
+    avatar_url = models.URLField(blank=True, default="")
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -42,7 +57,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ["username"]
 
     def __str__(self):
-        return self.email
+        return self.username
