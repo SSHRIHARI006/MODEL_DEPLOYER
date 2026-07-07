@@ -142,3 +142,115 @@ class PredictAPIView(APIView):
             return Response(
                 {"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+from django.db import transaction
+from billing.models import Wallet, LedgerTransaction
+from .authentication import UniversalOrJWTAuthentication
+
+class UniversalInferenceAPIView(APIView):
+    """
+    POST /api/v1/inference/@<username>/<model_name>/
+    The monetized universal gateway.
+    """
+    authentication_classes = [UniversalOrJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "predict"
+
+    def post(self, request, username, model_name):
+        # 1. Look up Model
+        model = Model.objects.filter(owner__username=username, name=model_name).first()
+        if not model:
+            return Response({"error": "Model not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        if not model.is_public and model.owner != request.user:
+            return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Look up running deployment (For Phase 4, we assume the latest deployment)
+        deployment = Deployment.objects.select_related("model_version").filter(
+            model_version__model=model,
+            status=Deployment.Status.RUNNING,
+            internal_url__isnull=False
+        ).order_by("-created_at").first()
+
+        if not deployment:
+            return Response({"error": "No running deployment available for this model"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        # 3. Check Wallet Balance
+        consumer_wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        cost = model.cost_per_run
+        
+        if consumer_wallet.credit_balance < cost:
+            return Response(
+                {"error": "Insufficient credits", "balance": consumer_wallet.credit_balance, "cost": cost}, 
+                status=status.HTTP_402_PAYMENT_REQUIRED
+            )
+
+        # 4. Perform Inference (Synchronous for now)
+        serializer = PredictRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instances = serializer.validated_data["instances"]
+
+        manifest_path = Path(deployment.model_version.artifact_path) / "model.yaml"
+        runner = RunnerFactory.get_runner(framework=model.framework)
+
+        start = time.time()
+        try:
+            result = runner.predict({
+                "model_id": str(model.id),
+                "manifest_path": str(manifest_path),
+                "instances": instances,
+            })
+            
+            latency = (time.time() - start) * 1000
+            if result.status_code >= 400:
+                # If inference fails, do NOT charge the user
+                return Response(result.data, status=result.status_code)
+
+        except Exception as e:
+            return Response({"error": "Inference execution failed", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 5. Inference Succeeded -> Finalize Billing
+        with transaction.atomic():
+            # Lock the wallets to prevent race conditions
+            consumer_wallet = Wallet.objects.select_for_update().get(user=request.user)
+            creator_wallet, _ = Wallet.objects.select_for_update().get_or_create(user=model.owner)
+
+            creator_cut = cost * type(cost)('0.8')
+            platform_cut = cost - creator_cut
+
+            # Deduct from consumer
+            consumer_wallet.credit_balance -= cost
+            consumer_wallet.lifetime_spent += cost
+            consumer_wallet.save()
+
+            # Add to creator
+            creator_wallet.credit_balance += creator_cut
+            creator_wallet.lifetime_earned += creator_cut
+            creator_wallet.save()
+
+            # Record Ledger
+            LedgerTransaction.objects.create(
+                consumer=request.user,
+                creator=model.owner,
+                model=model,
+                transaction_type=LedgerTransaction.TransactionType.INFERENCE,
+                amount=cost,
+                creator_share=creator_cut,
+                platform_share=platform_cut,
+                description=f"Inference on {model.name}"
+            )
+            
+            # Log Prediction
+            PredictionLog.objects.create(
+                uid=str(time.time()),
+                user=request.user,
+                model=model,
+                deployment=deployment,
+                input_data={"instances": instances},
+                output_data=result.data,
+                latency_ms=latency,
+                status="SUCCESS"
+            )
+
+        return Response(result.data, status=result.status_code)
