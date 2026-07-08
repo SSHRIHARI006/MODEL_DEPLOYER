@@ -1,8 +1,11 @@
+import os
 import shutil
 import uuid
 import zipfile
 from pathlib import Path
 
+import tempfile
+import boto3
 import yaml
 from django.conf import settings
 from rest_framework import status
@@ -16,6 +19,14 @@ from .serializers import ModelUploadSerializer
 
 BASE_STORAGE = Path(settings.BASE_DIR) / "storage" / "models"
 
+def get_s3_client():
+    return boto3.client(
+        's3',
+        endpoint_url=settings.AWS_S3_ENDPOINT_URL,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        use_ssl=settings.AWS_S3_USE_SSL,
+    )
 
 class ModelUploadAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -91,6 +102,25 @@ class ModelUploadAPIView(APIView):
             if not artifact_path.exists():
                 raise ValueError("model artifact not found")
 
+            # MinIO / S3 Upload
+            s3_client = get_s3_client()
+            bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+            s3_prefix = f"{model_id}/{version}/"
+            
+            # Walk the temp directory and upload all files
+            for root, dirs, files in os.walk(version_path):
+                for file_name in files:
+                    local_file_path = os.path.join(root, file_name)
+                    # Calculate relative path to maintain folder structure
+                    relative_path = os.path.relpath(local_file_path, version_path)
+                    s3_key = f"{s3_prefix}{relative_path}"
+                    
+                    s3_client.upload_file(
+                        local_file_path, 
+                        bucket_name, 
+                        s3_key
+                    )
+
             model = Model.objects.create(
                 id=model_id,
                 name=model_name,
@@ -99,10 +129,12 @@ class ModelUploadAPIView(APIView):
                 owner=request.user,
             )
 
+            # Store the S3 URI instead of a local path
+            s3_uri = f"s3://{bucket_name}/{s3_prefix.rstrip('/')}"
             version_obj = ModelVersion.objects.create(
                 model=model,
                 version=version,
-                artifact_path=str(version_path),
+                artifact_path=s3_uri,
                 status="READY",
             )
 
@@ -117,9 +149,11 @@ class ModelUploadAPIView(APIView):
             )
 
         except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
+        finally:
             if model_root.exists():
                 shutil.rmtree(model_root)
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ModelDetailAPIView(APIView):
@@ -128,13 +162,23 @@ class ModelDetailAPIView(APIView):
     def delete(self, request, model_id):
         try:
             model = Model.objects.get(id=model_id, owner=request.user)
-            # Safe deletion of local model storage root
-            model_root = BASE_STORAGE / model_id
-            if model_root.exists():
-                shutil.rmtree(model_root)
+            
+            # Clean up S3 objects
+            s3_client = get_s3_client()
+            bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+            
+            # Delete all versions from S3
+            response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=f"{model_id}/")
+            if 'Contents' in response:
+                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                s3_client.delete_objects(
+                    Bucket=bucket_name,
+                    Delete={'Objects': objects_to_delete}
+                )
+
             model.delete()
             return Response(
-                {"message": "Model deleted successfully"}, status=status.HTTP_200_OK
+                {"message": "Model and remote artifacts deleted successfully"}, status=status.HTTP_200_OK
             )
         except Model.DoesNotExist:
             return Response(

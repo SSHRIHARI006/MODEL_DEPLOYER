@@ -171,3 +171,11 @@ LOGGING = {
         },
     },
 }
+
+# Object Storage (MinIO S3) Settings
+AWS_ACCESS_KEY_ID = os.getenv("MINIO_ROOT_USER", "admin")
+AWS_SECRET_ACCESS_KEY = os.getenv("MINIO_ROOT_PASSWORD", "adminpassword")
+AWS_S3_ENDPOINT_URL = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
+AWS_STORAGE_BUCKET_NAME = os.getenv("MINIO_BUCKET", "model-artifacts")
+AWS_S3_USE_SSL = False
+AWS_DEFAULT_ACL = "public-read"

@@ -45,7 +45,11 @@ class PredictAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         instances = serializer.validated_data["instances"]
 
-        manifest_path = Path(deployment.model_version.artifact_path) / "model.yaml"
+        base_path = deployment.model_version.artifact_path
+        if base_path.startswith("s3://"):
+            manifest_path = f"{base_path}/model.yaml"
+        else:
+            manifest_path = str(Path(base_path) / "model.yaml")
         runner = RunnerFactory.get_runner(framework=model.framework)
 
         start = time.time()
@@ -191,14 +195,19 @@ class UniversalInferenceAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         instances = serializer.validated_data["instances"]
 
-        manifest_path = Path(deployment.model_version.artifact_path) / "model.yaml"
+        base_path = deployment.model_version.artifact_path
+        if base_path.startswith("s3://"):
+            manifest_path = f"{base_path}/model.yaml"
+        else:
+            manifest_path = str(Path(base_path) / "model.yaml")
+
         runner = RunnerFactory.get_runner(framework=model.framework)
 
         start = time.time()
         try:
             result = runner.predict({
                 "model_id": str(model.id),
-                "manifest_path": str(manifest_path),
+                "manifest_path": manifest_path,
                 "instances": instances,
             })
             

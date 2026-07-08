@@ -61,6 +61,7 @@ task_type: regression
     )
     upload = SimpleUploadedFile("bundle.zip", data, content_type="application/zip")
     up = api_client.post("/api/models/upload/", {"file": upload}, format="multipart")
+    print("UPLOAD ERROR:", up.json())
     assert up.status_code == 201
     model_id = up.data["model_id"]
     model_version_id = up.data["model_version_id"]

@@ -8,6 +8,19 @@ from api_keys.models import APIKey
 User = get_user_model()
 
 
+from unittest.mock import MagicMock
+
+@pytest.fixture(autouse=True)
+def mock_s3(monkeypatch):
+    mock_client = MagicMock()
+    mock_client.list_objects_v2.return_value = {}
+    
+    # Safely try patching if the module is loaded
+    try:
+        monkeypatch.setattr("model_registry.views.get_s3_client", lambda: mock_client)
+    except Exception:
+        pass
+
 @pytest.fixture
 def api_client():
     return APIClient()

@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import yaml
+import boto3
+from urllib.parse import urlparse
 
 app = FastAPI()
 
@@ -50,6 +52,34 @@ def _ensure_within_root(path: Path, root: Path) -> None:
         ) from exc
 
 
+def _download_s3_artifact(s3_uri: str, local_dir: Path):
+    if local_dir.exists() and list(local_dir.iterdir()):
+        return  # Already cached
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+    parsed = urlparse(s3_uri)
+    bucket = parsed.netloc
+    prefix = parsed.path.lstrip('/')
+
+    s3_client = boto3.client(
+        's3',
+        endpoint_url=os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
+        aws_access_key_id=os.getenv("MINIO_ROOT_USER", "admin"),
+        aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD", "adminpassword"),
+    )
+
+    paginator = s3_client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        if 'Contents' not in page:
+            continue
+        for obj in page['Contents']:
+            key = obj['Key']
+            rel_path = os.path.relpath(key, prefix)
+            target_path = local_dir / rel_path
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            s3_client.download_file(bucket, key, str(target_path))
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -57,7 +87,14 @@ def health():
 
 @app.post("/init-model")
 def init_model(req: InitModelRequest):
-    manifest_path = Path(req.manifest_path)
+    if req.manifest_path.startswith("s3://"):
+        artifact_uri = req.manifest_path.rsplit('/', 1)[0]
+        local_model_dir = MODELS_ROOT / req.model_id
+        _download_s3_artifact(artifact_uri, local_model_dir)
+        manifest_path = local_model_dir / "model.yaml"
+    else:
+        manifest_path = Path(req.manifest_path)
+
     _ensure_within_root(manifest_path, MODELS_ROOT)
 
     if not manifest_path.exists():
@@ -119,7 +156,14 @@ BRIDGE_MAP = {
 
 @app.post("/predict")
 def predict(req: PredictRequest):
-    manifest_path = Path(req.manifest_path)
+    if req.manifest_path.startswith("s3://"):
+        artifact_uri = req.manifest_path.rsplit('/', 1)[0]
+        local_model_dir = MODELS_ROOT / req.model_id
+        _download_s3_artifact(artifact_uri, local_model_dir)
+        manifest_path = local_model_dir / "model.yaml"
+    else:
+        manifest_path = Path(req.manifest_path)
+        
     _ensure_within_root(manifest_path, MODELS_ROOT)
 
     if not manifest_path.exists():
