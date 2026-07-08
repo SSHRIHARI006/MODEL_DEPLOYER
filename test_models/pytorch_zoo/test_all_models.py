@@ -29,9 +29,11 @@ def get_model_dirs():
 
 
 def register_and_login():
-    email = f"zoo_{uuid.uuid4().hex[:8]}@test.com"
+    uuid_hex = uuid.uuid4().hex[:8]
+    email = f"zoo_{uuid_hex}@test.com"
+    username = f"zoo_user_{uuid_hex}"
     pw = "ZooTestPass123!"
-    requests.post(f"{BASE_URL}/api/auth/register/", json={"email": email, "password": pw}).raise_for_status()
+    requests.post(f"{BASE_URL}/api/auth/register/", json={"email": email, "username": username, "password": pw}).raise_for_status()
     res = requests.post(f"{BASE_URL}/api/auth/login/", json={"email": email, "password": pw})
     res.raise_for_status()
     return res.json()["access"]

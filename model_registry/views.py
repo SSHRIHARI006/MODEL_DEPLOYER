@@ -19,6 +19,8 @@ from .serializers import ModelUploadSerializer
 
 BASE_STORAGE = Path(settings.BASE_DIR) / "storage" / "models"
 
+from botocore.client import Config
+
 def get_s3_client():
     return boto3.client(
         's3',
@@ -26,6 +28,7 @@ def get_s3_client():
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         use_ssl=settings.AWS_S3_USE_SSL,
+        config=Config(s3={'addressing_style': 'path'})
     )
 
 class ModelUploadAPIView(APIView):

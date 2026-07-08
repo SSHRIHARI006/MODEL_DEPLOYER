@@ -49,7 +49,53 @@ services:
       exit 0;
       "
 
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgres://postgres:postgrespassword@db:5432/model_deployer
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - AWS_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=adminpassword
+      - RUNNER_BASE_URL=http://worker:8002
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+      - minio
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=adminpassword
+    ports:
+      - "8002:8002"
+    depends_on:
+      - minio
+    volumes:
+      - worker_storage:/app/storage
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  worker_storage:

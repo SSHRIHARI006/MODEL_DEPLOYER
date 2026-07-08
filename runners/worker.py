@@ -24,10 +24,12 @@ class InitModelRequest(BaseModel):
     manifest_path: str = Field(..., min_length=1)
 
 
+from typing import Any
+
 class PredictRequest(BaseModel):
     model_id: str = Field(..., min_length=1)
     manifest_path: str = Field(..., min_length=1)
-    instances: list[dict]
+    instances: list[Any]
 
 
 class TeardownRequest(BaseModel):
@@ -52,6 +54,8 @@ def _ensure_within_root(path: Path, root: Path) -> None:
         ) from exc
 
 
+from botocore.client import Config
+
 def _download_s3_artifact(s3_uri: str, local_dir: Path):
     if local_dir.exists() and list(local_dir.iterdir()):
         return  # Already cached
@@ -66,6 +70,7 @@ def _download_s3_artifact(s3_uri: str, local_dir: Path):
         endpoint_url=os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
         aws_access_key_id=os.getenv("MINIO_ROOT_USER", "admin"),
         aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD", "adminpassword"),
+        config=Config(s3={'addressing_style': 'path'})
     )
 
     paginator = s3_client.get_paginator('list_objects_v2')

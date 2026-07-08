@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useStore } from './store';
 import { Explore } from './pages/Explore';
 import { UserProfile } from './pages/UserProfile';
 import { ModelRepo } from './pages/ModelRepo';
@@ -19,6 +21,16 @@ function NotFound() {
 }
 
 function App() {
+  const theme = useStore((state) => state.theme);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   return (
     <BrowserRouter>
       <Routes>

@@ -206,7 +206,7 @@ def run():
             ModelVersion.objects.create(
                 model=model,
                 version="v1.0.0",
-                artifact_path=f"s3://model-bucket/{username}/{model.name}/v1/",
+                artifact_path=f"s3://model-artifacts/{username}/{model.name}/v1/",
                 status="READY"
             )
             print(f"  -> Created rich model {model.name} for @{username}")

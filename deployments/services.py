@@ -33,18 +33,22 @@ def _build_and_run_deployment(deployment_id: str):
                 update_fields=["status", "last_error", "build_logs", "updated_at"]
             )
 
-        build_path = Path(deployment.model_version.artifact_path)
-        if not build_path.exists() or not build_path.is_dir():
-            raise RuntimeError("Model artifact path does not exist")
+        base_path = deployment.model_version.artifact_path
+        if base_path.startswith("s3://"):
+            manifest_path = f"{base_path}/model.yaml"
+        else:
+            build_path = Path(base_path)
+            if not build_path.exists() or not build_path.is_dir():
+                raise RuntimeError("Model artifact path does not exist")
+            manifest_path = str(build_path / "model.yaml")
 
         model = deployment.model_version.model
         runner = RunnerFactory.get_runner(framework=model.framework)
 
-        manifest_path = build_path / "model.yaml"
         init_result = runner.init_environment(
             {
                 "model_id": str(model.id),
-                "manifest_path": str(manifest_path),
+                "manifest_path": manifest_path,
             }
         )
         if init_result.status_code >= 400:

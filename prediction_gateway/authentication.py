@@ -21,7 +21,7 @@ class UniversalOrJWTAuthentication(BaseAuthentication):
         # Check if it looks like a Universal API Key
         if token.startswith("md_live_"):
             try:
-                prefix = token.split("_")[2][:8]
+                prefix = token[:12]
             except IndexError:
                 raise AuthenticationFailed("Malformed API Key")
             

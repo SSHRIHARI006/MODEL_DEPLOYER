@@ -17,6 +17,20 @@
   --font-mono:        "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
 }
 
+.dark {
+  --color-bg:         #0d1117;
+  --color-surface:    #161b22;
+  --color-border:     #30363d;
+  --color-text:       #c9d1d9;
+  --color-text-muted: #8b949e;
+  --color-accent:     #58a6ff;
+  --color-cta:        #238636;
+  --color-cta-hover:  #2ea043;
+  --color-danger:     #da3633;
+  --color-terminal:   #0d1117;
+  --color-terminal-text: #c9d1d9;
+}
+
 * {
   margin: 0;
   padding: 0;

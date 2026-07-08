@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Box, Search, LogOut, LayoutDashboard } from 'lucide-react';
+import { Box, Search, LogOut, LayoutDashboard, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 
 export function Navbar() {
-  const { token, username, logout } = useStore();
+  const { token, username, logout, theme, toggleTheme } = useStore();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
@@ -73,6 +73,10 @@ export function Navbar() {
 
         {/* Right nav */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button onClick={toggleTheme} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            {theme === 'dark' ? <Sun size={18} color="var(--color-text-muted)" /> : <Moon size={18} color="var(--color-text-muted)" />}
+          </button>
+          
           {token ? (
             <>
               <Link

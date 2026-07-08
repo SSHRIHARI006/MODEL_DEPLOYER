@@ -22,11 +22,13 @@ interface AppState {
 
   wallet: WalletData | null;
   keys: UniversalKey[];
+  theme: 'light' | 'dark';
 
   setAuth: (token: string | null, username: string | null) => void;
   logout: () => void;
   fetchWallet: () => Promise<void>;
   fetchKeys: () => Promise<void>;
+  toggleTheme: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -35,6 +37,7 @@ export const useStore = create<AppState>((set) => ({
 
   wallet: null,
   keys: [],
+  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
 
   setAuth: (token, username) => {
     if (token && username) {
@@ -43,6 +46,12 @@ export const useStore = create<AppState>((set) => ({
     }
     set({ token, username });
   },
+
+  toggleTheme: () => set((state) => {
+    const newTheme = state.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('theme', newTheme);
+    return { theme: newTheme };
+  }),
 
   logout: () => {
     localStorage.removeItem('token');
