@@ -64,11 +64,12 @@ media/
 Thumbs.db
 
 # ------------------------------
-# Testing / coverage
+# Testing / coverage / linting
 # ------------------------------
 .coverage
 htmlcov/
 .pytest_cache/
+.ruff_cache/
 
 # ------------------------------
 # Logs

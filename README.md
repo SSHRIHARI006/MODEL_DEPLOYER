@@ -86,60 +86,38 @@ git clone <repository-url>
 cd MODEL_DEPLOYER
 ```
 
-### 2. Create virtual environment
+### 2. Run with Docker Compose
+
+The easiest way to spin up the entire stack (PostgreSQL, Redis, MinIO, API Gateway, Worker, and Frontend) is using Docker Compose:
 
 ```
-uv venv
-source .venv/bin/activate
+docker compose up --build
 ```
 
-### 3. Install dependencies
+The services will be available at:
+- **Frontend Console**: `http://localhost:80`
+- **API Gateway**: `http://localhost:8000`
+- **MinIO Console**: `http://localhost:9001` (admin/adminpassword)
+
+### 3. Run migrations and populate dummy data (Optional)
 
 ```
-uv pip install -r requirements.txt
+docker compose exec api python manage.py migrate
+docker compose exec api python manage.py createsuperuser
+docker compose exec api python populate_db.py
 ```
 
-### 4. Configure database
+### 4. Run tests
 
-Copy `.env.example` to `.env` and set values.
-
-### 5. Run migrations
-
+You can run tests inside the API container:
 ```
-python manage.py makemigrations
-python manage.py migrate
-```
-
-### 6. Create superuser
-
-```
-python manage.py createsuperuser
-```
-
-### 7. Run control plane server
-
-```
-python manage.py runserver 8000
-```
-
-### 8. Run FastAPI Runner Worker (New Terminal)
-
-```
-source .venv/bin/activate
-uvicorn runners.worker:app --port 8002 --reload
-```
-
-### 9. Run tests
-
-```
-pytest -v --ds=config.settings_test
-pytest --cov=. --cov-report=term-missing --ds=config.settings_test
+docker compose exec api pytest -v --ds=config.settings_test
 ```
 
 ## CURRENT STATUS & TECHNICAL DEBT
 
-- The deployment state machine and proxy routing are implemented.
-- The system uses a FastAPI subprocess worker pool instead of Docker SDK, allowing it to natively resolve requirements inside `uv` sandboxes.
+- The entire stack is now fully containerized via `docker-compose.yml`, which manages PostgreSQL, Redis, MinIO (with auto-created `model-artifacts` bucket), the API gateway, the worker runner, and the frontend.
+- The deployment state machine and proxy routing are implemented and hardened.
 
 ## THE ROADMAP
 
