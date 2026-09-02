@@ -1,6 +1,10 @@
+import hashlib
+import json
 import time
+
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from pathlib import Path
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -15,6 +19,20 @@ from model_registry.models import Model
 from .models import PredictionLog
 from .permissions import HasValidModelAPIKey
 from .serializers import PredictRequestSerializer
+
+
+def prediction_cache_key(model_id, model_version_id, instances):
+    payload = json.dumps(
+        {
+            "model_id": str(model_id),
+            "model_version_id": str(model_version_id),
+            "instances": instances,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"prediction:{settings.PREDICTION_CACHE_VERSION}:{digest}"
 
 
 class PredictAPIView(APIView):
@@ -44,6 +62,21 @@ class PredictAPIView(APIView):
         serializer = PredictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instances = serializer.validated_data["instances"]
+        cache_key = prediction_cache_key(model.id, deployment.model_version_id, instances)
+
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            PredictionLog.objects.create(
+                uid=str(time.time()),
+                user=request.user,
+                model=model,
+                deployment=deployment,
+                input_data={"instances": instances},
+                output_data=cached_data,
+                latency_ms=0,
+                status="SUCCESS",
+            )
+            return Response(cached_data, status=status.HTTP_200_OK)
 
         base_path = deployment.model_version.artifact_path
         if base_path.startswith("s3://"):
@@ -78,6 +111,12 @@ class PredictAPIView(APIView):
                         data.get("error")
                         or data.get("detail")
                         or "Upstream client error"
+                    )
+                else:
+                    cache.set(
+                        cache_key,
+                        data,
+                        timeout=settings.PREDICTION_CACHE_TTL_SECONDS,
                     )
 
             PredictionLog.objects.create(
@@ -136,7 +175,7 @@ class PredictAPIView(APIView):
                 user=request.user,
                 model=model,
                 deployment=deployment,
-                input_data=data,
+                input_data={"instances": instances},
                 output_data={},
                 latency_ms=latency,
                 status="ERROR",
@@ -180,65 +219,86 @@ class UniversalInferenceAPIView(APIView):
         if not deployment:
             return Response({"error": "No running deployment available for this model"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        # 3. Check Wallet Balance
-        consumer_wallet, _ = Wallet.objects.get_or_create(user=request.user)
         cost = model.cost_per_run
-        
+        consumer_wallet, _ = Wallet.objects.get_or_create(user=request.user)
         if consumer_wallet.credit_balance < cost:
             return Response(
-                {"error": "Insufficient credits", "balance": consumer_wallet.credit_balance, "cost": cost}, 
-                status=status.HTTP_402_PAYMENT_REQUIRED
+                {
+                    "error": "Insufficient credits",
+                    "balance": consumer_wallet.credit_balance,
+                    "cost": cost,
+                },
+                status=status.HTTP_402_PAYMENT_REQUIRED,
             )
 
-        # 4. Perform Inference (Synchronous for now)
         serializer = PredictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instances = serializer.validated_data["instances"]
+        cache_key = prediction_cache_key(model.id, deployment.model_version_id, instances)
+        cached_data = cache.get(cache_key)
 
-        base_path = deployment.model_version.artifact_path
-        if base_path.startswith("s3://"):
-            manifest_path = f"{base_path}/model.yaml"
+        if cached_data is not None:
+            result_data = cached_data
+            result_status = status.HTTP_200_OK
+            latency = 0
         else:
-            manifest_path = str(Path(base_path) / "model.yaml")
+            base_path = deployment.model_version.artifact_path
+            if base_path.startswith("s3://"):
+                manifest_path = f"{base_path}/model.yaml"
+            else:
+                manifest_path = str(Path(base_path) / "model.yaml")
 
-        runner = RunnerFactory.get_runner(framework=model.framework)
+            runner = RunnerFactory.get_runner(framework=model.framework)
+            start = time.time()
+            try:
+                result = runner.predict({
+                    "model_id": str(model.id),
+                    "manifest_path": manifest_path,
+                    "instances": instances,
+                })
+            except Exception as exc:
+                return Response(
+                    {"error": "Inference execution failed", "detail": str(exc)},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-        start = time.time()
-        try:
-            result = runner.predict({
-                "model_id": str(model.id),
-                "manifest_path": manifest_path,
-                "instances": instances,
-            })
-            
             latency = (time.time() - start) * 1000
             if result.status_code >= 400:
-                # If inference fails, do NOT charge the user
                 return Response(result.data, status=result.status_code)
 
-        except Exception as e:
-            return Response({"error": "Inference execution failed", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            result_data = result.data
+            result_status = result.status_code
+            cache.set(
+                cache_key,
+                result_data,
+                timeout=settings.PREDICTION_CACHE_TTL_SECONDS,
+            )
 
-        # 5. Inference Succeeded -> Finalize Billing
         with transaction.atomic():
-            # Lock the wallets to prevent race conditions
             consumer_wallet = Wallet.objects.select_for_update().get(user=request.user)
-            creator_wallet, _ = Wallet.objects.select_for_update().get_or_create(user=model.owner)
+            if consumer_wallet.credit_balance < cost:
+                return Response(
+                    {
+                        "error": "Insufficient credits",
+                        "balance": consumer_wallet.credit_balance,
+                        "cost": cost,
+                    },
+                    status=status.HTTP_402_PAYMENT_REQUIRED,
+                )
 
-            creator_cut = cost * type(cost)('0.8')
+            creator_wallet, _ = Wallet.objects.get_or_create(user=model.owner)
+            creator_wallet = Wallet.objects.select_for_update().get(pk=creator_wallet.pk)
+            creator_cut = cost * type(cost)("0.8")
             platform_cut = cost - creator_cut
 
-            # Deduct from consumer
             consumer_wallet.credit_balance -= cost
             consumer_wallet.lifetime_spent += cost
-            consumer_wallet.save()
+            consumer_wallet.save(update_fields=["credit_balance", "lifetime_spent", "updated_at"])
 
-            # Add to creator
             creator_wallet.credit_balance += creator_cut
             creator_wallet.lifetime_earned += creator_cut
-            creator_wallet.save()
+            creator_wallet.save(update_fields=["credit_balance", "lifetime_earned", "updated_at"])
 
-            # Record Ledger
             LedgerTransaction.objects.create(
                 consumer=request.user,
                 creator=model.owner,
@@ -247,19 +307,18 @@ class UniversalInferenceAPIView(APIView):
                 amount=cost,
                 creator_share=creator_cut,
                 platform_share=platform_cut,
-                description=f"Inference on {model.name}"
+                description=f"Inference on {model.name}",
             )
-            
-            # Log Prediction
+
             PredictionLog.objects.create(
                 uid=str(time.time()),
                 user=request.user,
                 model=model,
                 deployment=deployment,
                 input_data={"instances": instances},
-                output_data=result.data,
+                output_data=result_data,
                 latency_ms=latency,
-                status="SUCCESS"
+                status="SUCCESS",
             )
 
-        return Response(result.data, status=result.status_code)
+        return Response(result_data, status=result_status)

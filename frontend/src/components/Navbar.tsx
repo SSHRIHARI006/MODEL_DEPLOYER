@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Box, Search, LogOut, LayoutDashboard, Moon, Sun } from 'lucide-react';
+import { Box, Search, LogOut, LayoutDashboard, Moon, Sun, Book } from 'lucide-react';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -76,7 +76,22 @@ export function Navbar() {
           <button onClick={toggleTheme} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             {theme === 'dark' ? <Sun size={18} color="var(--color-text-muted)" /> : <Moon size={18} color="var(--color-text-muted)" />}
           </button>
-          
+
+          <Link
+            to="/docs"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 14,
+              color: 'var(--color-text)',
+              textDecoration: 'none',
+            }}
+          >
+            <Book size={16} />
+            Docs
+          </Link>
+
           {token ? (
             <>
               <Link

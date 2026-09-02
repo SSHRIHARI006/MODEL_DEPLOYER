@@ -5,6 +5,7 @@ import { Explore } from './pages/Explore';
 import { UserProfile } from './pages/UserProfile';
 import { ModelRepo } from './pages/ModelRepo';
 import { Dashboard } from './pages/Dashboard';
+import { Docs } from './pages/Docs';
 import { Login, Register } from './pages/Auth';
 import { Navbar } from './components/Navbar';
 
@@ -43,7 +44,10 @@ function App() {
         
         {/* Private Dashboard */}
         <Route path="/dashboard/*" element={<Dashboard />} />
-        
+
+        {/* Docs (must precede the dynamic namespace route) */}
+        <Route path="/docs" element={<Docs />} />
+
         {/* Dynamic Namespaces */}
         <Route path="/:namespace" element={<UserProfile />} />
         <Route path="/:namespace/:model_name" element={<ModelRepo />} />

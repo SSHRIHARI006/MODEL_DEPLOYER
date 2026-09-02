@@ -40,11 +40,13 @@ class DeploymentCreateAPIView(APIView):
             status=Deployment.Status.PENDING,
             runtime_type="container",
         )
-        start_deployment_async(str(deployment.id))
+        task = start_deployment_async(str(deployment.id))
+        response_data = DeploymentSerializer(deployment).data
+        task_id = getattr(task, "id", None)
+        if isinstance(task_id, str):
+            response_data["task_id"] = task_id
 
-        return Response(
-            DeploymentSerializer(deployment).data, status=status.HTTP_202_ACCEPTED
-        )
+        return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 
 class DeploymentDetailAPIView(APIView):

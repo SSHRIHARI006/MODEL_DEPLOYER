@@ -15,8 +15,14 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 
 ALLOWED_HOSTS = [
-    h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()
+    h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
 ]
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+PREDICTION_CACHE_TTL_SECONDS = int(os.getenv("PREDICTION_CACHE_TTL_SECONDS", "300"))
+PREDICTION_CACHE_VERSION = os.getenv("PREDICTION_CACHE_VERSION", "v1")
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -28,6 +34,22 @@ REST_FRAMEWORK = {
         "predict": "20/min",
     },
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
+CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
@@ -132,9 +154,12 @@ AUTH_USER_MODEL = "users.User"
 
 # CORS — allow the React dev server
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
+    ).split(",")
+    if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -173,9 +198,9 @@ LOGGING = {
 }
 
 # Object Storage (MinIO S3) Settings
-AWS_ACCESS_KEY_ID = os.getenv("MINIO_ROOT_USER", "admin")
-AWS_SECRET_ACCESS_KEY = os.getenv("MINIO_ROOT_PASSWORD", "adminpassword")
+AWS_ACCESS_KEY_ID = os.getenv("MINIO_ROOT_USER", "")
+AWS_SECRET_ACCESS_KEY = os.getenv("MINIO_ROOT_PASSWORD", "")
 AWS_S3_ENDPOINT_URL = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 AWS_STORAGE_BUCKET_NAME = os.getenv("MINIO_BUCKET", "model-artifacts")
-AWS_S3_USE_SSL = False
-AWS_DEFAULT_ACL = "public-read"
+AWS_S3_USE_SSL = os.getenv("MINIO_USE_SSL", "false").lower() == "true"
+AWS_DEFAULT_ACL = None

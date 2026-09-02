@@ -97,7 +97,7 @@ docker compose up --build
 The services will be available at:
 - **Frontend Console**: `http://localhost:80`
 - **API Gateway**: `http://localhost:8000`
-- **MinIO Console**: `http://localhost:9001` (admin/adminpassword)
+- **MinIO Console**: `http://localhost:9001` (credentials configured in `.env`)
 
 ### 3. Run migrations and populate dummy data (Optional)
 

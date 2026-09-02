@@ -68,8 +68,8 @@ def _download_s3_artifact(s3_uri: str, local_dir: Path):
     s3_client = boto3.client(
         's3',
         endpoint_url=os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
-        aws_access_key_id=os.getenv("MINIO_ROOT_USER", "admin"),
-        aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD", "adminpassword"),
+        aws_access_key_id=os.getenv("MINIO_ROOT_USER", ""),
+        aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD", ""),
         config=Config(s3={'addressing_style': 'path'})
     )
 

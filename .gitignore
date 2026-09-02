@@ -42,12 +42,9 @@ staticfiles/
 media/
 
 # ------------------------------
-# Migrations (keep or ignore carefully)
+# Migrations
 # ------------------------------
-# If team project → KEEP migrations
-# If solo early stage → you can ignore
-# */migrations/*
-# !*/migrations/__init__.py
+# Keep Django migration files tracked.
 
 # ------------------------------
 # IDE / Editor
@@ -101,7 +98,10 @@ temp/
 /schema.json
 /model.pkl
 
-# Django migrations
-**/migrations/
-!**/migrations/__init__.py
+# Django migrations are tracked; generated storage remains ignored.
 
+# Generated model zoo reports
+test_models/results/
+
+.commandcode/
+specs/
