@@ -94,6 +94,67 @@ The complete supported environment surface is listed in `.env.example`. Importan
 
 Do not expose PostgreSQL, Redis, or the MinIO API publicly unless there is a specific operational reason. Put HTTPS termination and public routing in Caddy, nginx, or another reverse proxy.
 
+## Deploying to a server
+
+The same `docker-compose.yml` runs locally and in production; only `.env` differs.
+
+1. Point DNS at the host (an `A` record for the domain) and install Docker with the Compose plugin.
+2. Clone the repository on the server and keep the production environment file outside the checkout, for example `~/modeldeployer.env.prod`, then copy it into place:
+
+   ```sh
+   cp ~/modeldeployer.env.prod .env
+   ```
+
+   `.env` and `.env.*` are gitignored; never commit either file.
+3. Production values that must differ from `.env.example`:
+   - `DJANGO_SECRET_KEY` — generate with `python -c "import secrets; print(secrets.token_urlsafe(50))"`
+   - `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS=modeldeployer.shrihari.dev`
+   - `DJANGO_CORS_ALLOWED_ORIGINS=https://modeldeployer.shrihari.dev`
+   - `BILLING_ENABLED=true` only if you want to meter inference
+   - strong `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
+   - connection URLs pointing at the Compose service names (`db`, `redis`, `minio`, `worker`)
+4. Validate and start:
+
+   ```sh
+   docker compose config -q
+   docker compose up --build -d
+   docker compose ps
+   docker stats --no-stream
+   ```
+
+   `api` and `frontend` bind to `127.0.0.1` only; everything else is internal to the Compose network.
+5. Put Caddy (or another proxy) in front. `deploy/Caddyfile.example` is a working block for this domain: it terminates TLS and routes `/api/`, `/admin/`, and `/static/` to the API and everything else to the console.
+6. Smoke test the public URL:
+
+   ```sh
+   curl -I https://modeldeployer.shrihari.dev
+   ```
+
+   Then run one upload → deploy → predict through that URL, not just `localhost`.
+
+### Updating a deployment
+
+Back up the data volumes first; restoring without a backup is how data gets lost.
+
+```sh
+for volume in modeldeploy_postgres_data modeldeploy_minio_data; do
+  docker run --rm -v "$volume":/data -v "$(pwd)":/backup alpine \
+    tar czf "/backup/${volume}-$(date +%Y%m%d).tgz" /data
+done
+
+git pull
+docker compose up --build -d
+docker compose ps
+```
+
+Migrations run from the API entrypoint on start. If a pull added a migration and you need to run it separately:
+
+```sh
+docker compose exec api python manage.py migrate
+```
+
+Keep `.env` unchanged across updates unless `.env.example` gained a new variable. To roll back, check out the previous commit and run the same `docker compose up --build -d`.
+
 ## Known limitations
 
 - The Compose deployment is intended for a single host; it does not provide multi-node orchestration.

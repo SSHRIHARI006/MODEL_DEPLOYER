@@ -1,32 +1,49 @@
-# React + TypeScript + Vite
+# Model Deployer console
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript single-page app for the Model Deployer platform. It talks to
+the Django API under `/api` and is built with Vite, Tailwind CSS 4, and Zustand.
 
-Currently, two official plugins are available:
+## Pages
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Route | Page | Purpose |
+|---|---|---|
+| `/` | `Explore` | Public model explorer |
+| `/login`, `/register` | `Auth` | Sign in / create an account |
+| `/dashboard/*` | `Dashboard` | Uploads, deployments, deploy logs, API keys, inference testing |
+| `/docs` | `Docs` | In-app API reference |
+| `/:namespace` | `UserProfile` | A user's public models |
+| `/:namespace/:model_name` | `ModelRepo` | Single model page with README and inference form |
 
-## React Compiler
+`/docs` must stay registered above `/:namespace` in `src/App.tsx`, otherwise it
+is matched as a profile lookup for a user named "docs".
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Development
 
-## Expanding the Oxlint configuration
+The API is expected on `http://127.0.0.1:8000`; Vite proxies `/api` there
+(`vite.config.ts`), so no environment variables are required.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Other scripts:
+
+```sh
+npm run build      # type-check (tsc -b) and build to dist/
+npm run preview    # serve the production build locally
+npm run lint       # oxlint
+```
+
+## How requests are made
+
+`src/api.ts` wraps `fetch` and prefixes every path with `/api`. It attaches the
+JWT from `localStorage` as `Authorization: Bearer <token>` and redirects to
+`/login` on `401`. Auth state and the current user live in `src/store.ts`.
+
+## Container image
+
+`Dockerfile.frontend` builds the app with Node and serves `dist/` from nginx.
+`nginx.conf` falls back to `index.html` for client-side routes and reverse
+proxies `/api/` to the `api` service, so the console and API share an origin in
+the Compose stack.

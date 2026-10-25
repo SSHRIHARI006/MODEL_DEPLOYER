@@ -1,0 +1,20 @@
+# Caddyfile for modeldeployer.shrihari.dev
+#
+# Assumes Caddy runs on the host and the compose stack runs next to it.
+# The api and frontend ports are bound to 127.0.0.1 only, so Caddy is the
+# single public entry point. Caddy provisions TLS automatically.
+
+modeldeployer.shrihari.dev {
+	encode zstd gzip
+
+	# API, Django admin, and static/admin assets are served by Django.
+	@backend path /api/* /admin/* /static/*
+	handle @backend {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Everything else is the React console (nginx also proxies /api/).
+	handle {
+		reverse_proxy 127.0.0.1:80
+	}
+}

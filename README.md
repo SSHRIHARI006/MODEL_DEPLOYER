@@ -9,8 +9,11 @@ Model Deployer is a developer-first platform for deploying machine learning mode
 **Tech stack**
 
 - Django + Django REST Framework for the control plane and APIs.
-- PostgreSQL as the primary database (SQLite fallback for local development).
+- PostgreSQL as the primary database (SQLite fallback for local development), with Redis for caching and the Celery broker.
+- Celery for durable, asynchronous deployment builds.
+- MinIO (S3 API) for model artifact storage.
 - SimpleJWT for authentication.
+- React 19 + TypeScript + Vite + Tailwind for the console.
 - Pytest for API and integration testing.
 
 **Dynamic runner environments**
@@ -24,13 +27,13 @@ The platform builds and runs model environments dynamically using an isolated Fa
 
 Inference traffic is proxied from the API gateway to the active deployment's internal URL. The deployment lifecycle is tracked in [deployments/models.py](deployments/models.py) with a guarded state machine.
 
-**B2D Frontend Console**
+**Frontend console**
 
-The platform features a built-in, developer-first web application rendered natively via Django templates:
-- Features a dark glassmorphism design system built with vanilla CSS.
-- Client-side token routing and history state management.
-- Dynamic dashboard with real-time model status indicators and metrics.
-- Tabbed model management console with interactive inference testing and live deployment terminal logs.
+The console is a React single-page app served as a static build (`frontend/`), talking to the API under `/api`:
+- Public model explorer (`/`), user profiles (`/<username>`), and per-model pages (`/<username>/<model_name>`).
+- Authenticated dashboard (`/dashboard`) for uploads, deployments, deploy logs, API keys, and interactive inference testing.
+- In-app API reference at `/docs`.
+- Token-based auth stored client-side, with automatic redirect on `401`.
 
 ## CORE API DESIGN
 
@@ -59,6 +62,8 @@ The platform features a built-in, developer-first web application rendered nativ
 **Prediction gateway**
 
 - `POST /api/predict/<model_id>/` — Run inference (requires BOTH JWT + `X-API-Key`)
+- `POST /api/v1/inference/@<username>/<model_name>/` — Run inference by public address (JWT or a universal `md_live_...` API key); charges and credits are applied when billing is enabled
+- `POST /api/keys/universal/` — Create a universal API key that works across models
 
 **Monitoring**
 
@@ -71,10 +76,10 @@ The platform features a built-in, developer-first web application rendered nativ
 
 **Prediction flow**
 
-1. Client sends `POST /api/predict/<model_id>/` with JWT + `X-API-Key`.
-2. API gateway selects the latest RUNNING deployment for the model.
-3. Payload is proxied to the deployment runner `/predict` endpoint.
-4. Response is returned to client and a `PredictionLog` is persisted.
+1. Client sends `POST /api/predict/<model_id>/` with JWT + `X-API-Key` (or calls the universal `@username/model` endpoint).
+2. API gateway serves a Redis-cached response when the same model version and payload were seen within `PREDICTION_CACHE_TTL_SECONDS`.
+3. On a miss it selects the latest RUNNING deployment for the model and proxies the payload to the runner's `/predict` endpoint.
+4. The response is cached, returned to the client, and a `PredictionLog` is persisted.
 5. Gateway maps upstream errors to HTTP 502/503/504.
 
 ## LOCAL SETUP & TESTING
@@ -100,10 +105,11 @@ The services will be available at:
 
 PostgreSQL, Redis, MinIO, and the inference worker are internal to the Compose network; see `SELF_HOSTING.md` for debugging access.
 
-### 3. Run migrations and populate dummy data (Optional)
+### 3. Create an administrator and populate dummy data (Optional)
+
+Migrations run automatically from the API container's entrypoint.
 
 ```
-docker compose exec api python manage.py migrate
 docker compose exec api python manage.py createsuperuser
 docker compose exec api python populate_db.py
 ```
@@ -116,20 +122,22 @@ Run the test suite from a checkout with `uv` (uses SQLite and in-memory caches):
 uv run pytest
 ```
 
-## CURRENT STATUS & TECHNICAL DEBT
+## CURRENT STATUS
 
-- The entire stack is now fully containerized via `docker-compose.yml`, which manages PostgreSQL, Redis, MinIO (with auto-created `model-artifacts` bucket), the API gateway, the worker runner, and the frontend.
-- The deployment state machine and proxy routing are implemented and hardened.
+- One `docker-compose.yml` runs the whole stack for local development, self-hosting, and the VPS deploy: PostgreSQL, Redis, MinIO (bucket auto-created), the Django API, a Celery worker, the FastAPI inference runner, and the frontend.
+- Deployments run as Celery tasks and survive an API restart; predictions are cached in Redis per model version.
+- The deployment state machine, proxy routing, and API-key scopes are implemented and hardened; see `SELF_HOSTING.md` for configuration and known limitations.
+- The suite passes locally (`uv run pytest`), and a 20-model sklearn/PyTorch zoo has been validated end-to-end (upload → deploy → predict) with results in `test_models/results/`.
 
 ## THE ROADMAP
 
 **Short-term**
 
-- Containerize the Django/PostgreSQL control plane with `docker-compose.yml`.
+- Deploy the compose stack to the production VPS behind a TLS-terminating reverse proxy.
 
 **Mid-term**
 
-- Expand `runners` adapters to natively support TensorFlow and PyTorch model payloads.
+- Expand `runners` adapters to natively support TensorFlow model payloads.
 
 **Long-term**
 
