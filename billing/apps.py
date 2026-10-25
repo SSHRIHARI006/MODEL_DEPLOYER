@@ -2,4 +2,7 @@ from django.apps import AppConfig
 
 
 class BillingConfig(AppConfig):
-    name = 'billing'
+    name = "billing"
+
+    def ready(self):
+        from . import signals  # noqa: F401

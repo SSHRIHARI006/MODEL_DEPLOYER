@@ -17,7 +17,7 @@ class Model(models.Model):
 
     # Marketplace fields
     is_public = models.BooleanField(default=False)
-    cost_per_run = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+    cost_per_run = models.DecimalField(max_digits=8, decimal_places=4, default=1)
     description = models.TextField(blank=True, default="")
     readme_markdown = models.TextField(blank=True, default="")
 

@@ -29,8 +29,6 @@ class LedgerSerializer(serializers.ModelSerializer):
             "id",
             "transaction_type",
             "amount",
-            "creator_share",
-            "platform_share",
             "description",
             "consumer_username",
             "creator_username",

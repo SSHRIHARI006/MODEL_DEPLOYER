@@ -27,7 +27,6 @@ class LedgerTransaction(models.Model):
     class TransactionType(models.TextChoices):
         INFERENCE = "INFERENCE", "Inference Charge"
         DEPOSIT = "DEPOSIT", "Wallet Credit Deposit"
-        PAYOUT = "PAYOUT", "Creator Payout"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -56,8 +55,6 @@ class LedgerTransaction(models.Model):
         max_length=20, choices=TransactionType.choices
     )
     amount = models.DecimalField(max_digits=10, decimal_places=4)
-    creator_share = models.DecimalField(max_digits=10, decimal_places=4, default=0)
-    platform_share = models.DecimalField(max_digits=10, decimal_places=4, default=0)
 
     description = models.CharField(max_length=255, blank=True, default="")
 

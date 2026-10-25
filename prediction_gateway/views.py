@@ -220,16 +220,18 @@ class UniversalInferenceAPIView(APIView):
             return Response({"error": "No running deployment available for this model"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         cost = model.cost_per_run
-        consumer_wallet, _ = Wallet.objects.get_or_create(user=request.user)
-        if consumer_wallet.credit_balance < cost:
-            return Response(
-                {
-                    "error": "Insufficient credits",
-                    "balance": consumer_wallet.credit_balance,
-                    "cost": cost,
-                },
-                status=status.HTTP_402_PAYMENT_REQUIRED,
-            )
+        billing_enabled = getattr(settings, "BILLING_ENABLED", True)
+        if billing_enabled:
+            consumer_wallet, _ = Wallet.objects.get_or_create(user=request.user)
+            if consumer_wallet.credit_balance < cost:
+                return Response(
+                    {
+                        "error": "Insufficient credits",
+                        "balance": consumer_wallet.credit_balance,
+                        "cost": cost,
+                    },
+                    status=status.HTTP_402_PAYMENT_REQUIRED,
+                )
 
         serializer = PredictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -275,40 +277,37 @@ class UniversalInferenceAPIView(APIView):
             )
 
         with transaction.atomic():
-            consumer_wallet = Wallet.objects.select_for_update().get(user=request.user)
-            if consumer_wallet.credit_balance < cost:
-                return Response(
-                    {
-                        "error": "Insufficient credits",
-                        "balance": consumer_wallet.credit_balance,
-                        "cost": cost,
-                    },
-                    status=status.HTTP_402_PAYMENT_REQUIRED,
+            if billing_enabled:
+                consumer_wallet = Wallet.objects.select_for_update().get(user=request.user)
+                if consumer_wallet.credit_balance < cost:
+                    return Response(
+                        {
+                            "error": "Insufficient credits",
+                            "balance": consumer_wallet.credit_balance,
+                            "cost": cost,
+                        },
+                        status=status.HTTP_402_PAYMENT_REQUIRED,
+                    )
+
+                creator_wallet, _ = Wallet.objects.get_or_create(user=model.owner)
+                creator_wallet = Wallet.objects.select_for_update().get(pk=creator_wallet.pk)
+
+                consumer_wallet.credit_balance -= cost
+                consumer_wallet.lifetime_spent += cost
+                consumer_wallet.save(update_fields=["credit_balance", "lifetime_spent", "updated_at"])
+
+                creator_wallet.credit_balance += cost
+                creator_wallet.lifetime_earned += cost
+                creator_wallet.save(update_fields=["credit_balance", "lifetime_earned", "updated_at"])
+
+                LedgerTransaction.objects.create(
+                    consumer=request.user,
+                    creator=model.owner,
+                    model=model,
+                    transaction_type=LedgerTransaction.TransactionType.INFERENCE,
+                    amount=cost,
+                    description=f"Inference on {model.name}",
                 )
-
-            creator_wallet, _ = Wallet.objects.get_or_create(user=model.owner)
-            creator_wallet = Wallet.objects.select_for_update().get(pk=creator_wallet.pk)
-            creator_cut = cost * type(cost)("0.8")
-            platform_cut = cost - creator_cut
-
-            consumer_wallet.credit_balance -= cost
-            consumer_wallet.lifetime_spent += cost
-            consumer_wallet.save(update_fields=["credit_balance", "lifetime_spent", "updated_at"])
-
-            creator_wallet.credit_balance += creator_cut
-            creator_wallet.lifetime_earned += creator_cut
-            creator_wallet.save(update_fields=["credit_balance", "lifetime_earned", "updated_at"])
-
-            LedgerTransaction.objects.create(
-                consumer=request.user,
-                creator=model.owner,
-                model=model,
-                transaction_type=LedgerTransaction.TransactionType.INFERENCE,
-                amount=cost,
-                creator_share=creator_cut,
-                platform_share=platform_cut,
-                description=f"Inference on {model.name}",
-            )
 
             PredictionLog.objects.create(
                 uid=str(time.time()),
