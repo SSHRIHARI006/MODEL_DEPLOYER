@@ -20,14 +20,17 @@
    - `POSTGRES_PASSWORD` with a strong database password
    - `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` with dedicated object-storage credentials
 4. Set `DJANGO_ALLOWED_HOSTS` to the hostnames used to reach the API and frontend.
-5. Set `CORS_ALLOWED_ORIGINS` to the browser origins that are allowed to call the API.
-6. Start the stack:
+5. Set `DJANGO_CORS_ALLOWED_ORIGINS` to the browser origins that are allowed to call the API, including your production frontend origin.
+6. Billing (the simplified credit system described in `docs/marketplace-notes.md`) is disabled by default in `.env.example`. Leave `BILLING_ENABLED=false` for un-metered inference, or set it to `true` to enforce per-model credit charges.
+7. Start the stack:
 
    ```sh
    docker compose up --build -d
    ```
 
    Compose starts PostgreSQL, Redis, MinIO, the Django API, the Celery worker, the FastAPI runner, and the frontend. Named volumes preserve PostgreSQL, Redis, MinIO, and runner storage across container recreation.
+
+   Only the API and frontend publish host ports. PostgreSQL, Redis, MinIO, and the runner are reachable only on the internal Compose network, which is all the stack needs; their connection settings come from `.env`. If you need direct host access for debugging (for example the MinIO web console), add an explicit localhost-only bind such as `127.0.0.1:9001:9001` in a compose override file — never a `0.0.0.0` binding.
 
 ## Create the first administrator
 
@@ -80,13 +83,14 @@ The complete supported environment surface is listed in `.env.example`. Importan
 
 - `DJANGO_DEBUG=false`
 - `DJANGO_ALLOWED_HOSTS`
-- `CORS_ALLOWED_ORIGINS`
+- `DJANGO_CORS_ALLOWED_ORIGINS`
 - `DJANGO_SECRET_KEY`
 - `POSTGRES_*`
 - `MINIO_*`
 - `REDIS_URL`, `CELERY_BROKER_URL`, and `CELERY_RESULT_BACKEND`
 - `RUNNER_SKLEARN_URL` and `RUNNER_PYTORCH_URL`
 - `MAX_MODEL_ZIP_BYTES`, `INFERENCE_TIMEOUT_SECONDS`, and `PREDICTION_CACHE_TTL_SECONDS`
+- `BILLING_ENABLED` and `BILLING_STARTING_CREDITS`
 
 Do not expose PostgreSQL, Redis, or the MinIO API publicly unless there is a specific operational reason. Put HTTPS termination and public routing in Caddy, nginx, or another reverse proxy.
 
@@ -97,4 +101,4 @@ Do not expose PostgreSQL, Redis, or the MinIO API publicly unless there is a spe
 - The runner currently supports the implemented sklearn and PyTorch adapters only.
 - Model builds and inference consume host CPU, memory, and disk; there is no built-in quota scheduler.
 - Compose does not provide TLS. Configure HTTPS in the reverse proxy.
-- The marketplace, billing, wallet, multi-tenancy, and public model explorer features in `spec.md` are not part of this self-hosting package.
+- The simplified credit system (billing) described in `docs/marketplace-notes.md` is the only monetization feature; it is disabled by default in `.env.example`.

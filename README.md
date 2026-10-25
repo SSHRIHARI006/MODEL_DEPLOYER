@@ -97,7 +97,8 @@ docker compose up --build
 The services will be available at:
 - **Frontend Console**: `http://localhost:80`
 - **API Gateway**: `http://localhost:8000`
-- **MinIO Console**: `http://localhost:9001` (credentials configured in `.env`)
+
+PostgreSQL, Redis, MinIO, and the inference worker are internal to the Compose network; see `SELF_HOSTING.md` for debugging access.
 
 ### 3. Run migrations and populate dummy data (Optional)
 
@@ -109,9 +110,10 @@ docker compose exec api python populate_db.py
 
 ### 4. Run tests
 
-You can run tests inside the API container:
+Run the test suite from a checkout with `uv` (uses SQLite and in-memory caches):
+
 ```
-docker compose exec api pytest -v --ds=config.settings_test
+uv run pytest
 ```
 
 ## CURRENT STATUS & TECHNICAL DEBT
