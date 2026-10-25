@@ -22,6 +22,10 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# The suite exercises the monetized path by default; tests that cover the
+# self-hosted (un-metered) behaviour opt out explicitly.
+BILLING_ENABLED = True
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

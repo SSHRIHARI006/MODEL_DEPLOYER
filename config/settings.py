@@ -75,7 +75,7 @@ RUNNER_SKLEARN_URL = os.getenv("RUNNER_SKLEARN_URL", "http://localhost:8002")
 RUNNER_PYTORCH_URL = os.getenv("RUNNER_PYTORCH_URL", "http://localhost:8002")
 
 # Billing (simplified credit system — no real money anywhere)
-BILLING_ENABLED = os.getenv("BILLING_ENABLED", "true").lower() == "true"
+BILLING_ENABLED = os.getenv("BILLING_ENABLED", "false").lower() == "true"
 BILLING_STARTING_CREDITS = Decimal(os.getenv("BILLING_STARTING_CREDITS", "100"))
 
 INSTALLED_APPS = [
