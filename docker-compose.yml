@@ -81,6 +81,10 @@ services:
       names.count(b)==0 and s3.create_bucket(Bucket=b);
       print('bucket ready')"
     restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   api:
     build:
@@ -88,7 +92,8 @@ services:
       dockerfile: Dockerfile.api
     env_file: .env
     ports:
-      - "${API_PORT:-8000}:8000"
+      # Host-local only: the public entry point is the reverse proxy.
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -148,7 +153,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.frontend
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "127.0.0.1:${FRONTEND_PORT:-80}:80"
     depends_on:
       api:
         condition: service_started
