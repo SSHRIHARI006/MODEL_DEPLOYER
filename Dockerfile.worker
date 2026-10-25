@@ -6,8 +6,14 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-worker.txt ./
+# Install with uv so its cache stays in the image: model environments are then
+# created by hardlinking from this cache instead of re-downloading packages.
+RUN pip install --no-cache-dir uv==0.12.7 \
+ && uv pip install --system \
+      --index-strategy unsafe-best-match \
+      --extra-index-url https://download.pytorch.org/whl/cpu \
+      -r requirements.txt -r requirements-worker.txt
 
 COPY . .
 

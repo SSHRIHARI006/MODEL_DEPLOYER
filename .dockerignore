@@ -1,0 +1,44 @@
+# VCS
+.git
+.gitignore
+
+# Python environments & caches
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# NEVER bake object storage or generated model environments into images
+storage
+storage/envs
+
+# Generated zoo artifacts (regenerable; test models stay out of runtime images)
+test_models/results
+*.zip
+
+# Secrets & local databases
+.env
+db.sqlite3
+test_db.sqlite3
+*.sqlite3
+
+# Frontend build artifacts (image builds run npm inside the container)
+frontend/node_modules
+frontend/dist
+
+# Docs, specs, tooling
+.commandcode
+docs
+specs
+*.md
+!README.md
+
+# Logs & temp
+*.log
+tmp
+temp

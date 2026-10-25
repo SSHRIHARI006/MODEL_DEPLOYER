@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -108,7 +109,16 @@ def init_model(req: InitModelRequest):
     env_dir = ENVS_ROOT / req.model_id
     env_dir.mkdir(parents=True, exist_ok=True)
 
-    venv_cmd = ["uv", "venv", "--system-site-packages", str(env_dir)]
+    venv_cmd = [
+        "uv",
+        "venv",
+        "--system-site-packages",
+        # Base the model env on THIS interpreter so pip's satisfied-check sees
+        # exactly the packages the runtime (venv or image) already provides.
+        "--python",
+        sys.executable,
+        str(env_dir),
+    ]
     code, out, err, duration_ms = _run_cmd(venv_cmd)
     if code != 0:
         raise HTTPException(
@@ -135,10 +145,16 @@ def init_model(req: InitModelRequest):
         raise HTTPException(status_code=404, detail="requirements file not found")
 
     python_bin = env_dir / "bin" / "python"
+    # Resolve against the same indexes the platform pins (PyTorch CPU wheel,
+    # not the multi-GB CUDA build PyPI serves for `torch>=2.0.0`).
     pip_cmd = [
         "uv",
         "pip",
         "install",
+        "--index-strategy",
+        "unsafe-best-match",
+        "--extra-index-url",
+        "https://download.pytorch.org/whl/cpu",
         "-r",
         str(requirements_path),
         "--python",
