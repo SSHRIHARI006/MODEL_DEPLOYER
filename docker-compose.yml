@@ -39,7 +39,10 @@ services:
           memory: 256m
 
   minio:
-    image: minio/minio:latest
+    # minio/minio was removed from Docker Hub (and quay.io now requires auth),
+    # so this is the community rebuild of the same MinIO release. The S3 API,
+    # env vars, and data layout are unchanged.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
