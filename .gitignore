@@ -78,6 +78,7 @@ htmlcov/
 # ------------------------------
 .uv/
 *.lock
+!uv.lock
 
 # ------------------------------
 # Model storage (VERY IMPORTANT)

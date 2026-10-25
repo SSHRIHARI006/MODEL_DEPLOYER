@@ -3,16 +3,28 @@ Django settings for config project.
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 from datetime import timedelta
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+INSECURE_SECRET_VALUES = {
+    "dev-insecure-change-me",
+    "change-me",
+    "replace-with-a-long-random-secret",
+}
+if not DEBUG and SECRET_KEY in INSECURE_SECRET_VALUES:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be set to a real secret when DJANGO_DEBUG is false"
+    )
 
 ALLOWED_HOSTS = [
     h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
@@ -59,8 +71,12 @@ SIMPLE_JWT = {
 # Runtime guardrails
 MAX_MODEL_ZIP_BYTES = int(os.getenv("MAX_MODEL_ZIP_BYTES", 50 * 1024 * 1024))  # 50 MB
 INFERENCE_TIMEOUT_SECONDS = int(os.getenv("INFERENCE_TIMEOUT_SECONDS", 15))
-RUNNER_SKLEARN_URL = os.getenv("RUNNER_SKLEARN_URL", "http://runner-sklearn:8000")
-RUNNER_PYTORCH_URL = os.getenv("RUNNER_PYTORCH_URL", "http://runner-pytorch:8000")
+RUNNER_SKLEARN_URL = os.getenv("RUNNER_SKLEARN_URL", "http://localhost:8002")
+RUNNER_PYTORCH_URL = os.getenv("RUNNER_PYTORCH_URL", "http://localhost:8002")
+
+# Billing (simplified credit system — no real money anywhere)
+BILLING_ENABLED = os.getenv("BILLING_ENABLED", "true").lower() == "true"
+BILLING_STARTING_CREDITS = Decimal(os.getenv("BILLING_STARTING_CREDITS", "100"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -152,11 +168,11 @@ USE_TZ = True
 STATIC_URL = "static/"
 AUTH_USER_MODEL = "users.User"
 
-# CORS — allow the React dev server
+# CORS — env-driven so the deployed frontend origin can be added per environment
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
+        "DJANGO_CORS_ALLOWED_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
     ).split(",")
     if origin.strip()

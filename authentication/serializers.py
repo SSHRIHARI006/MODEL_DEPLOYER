@@ -20,8 +20,4 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        from billing.models import Wallet
-
-        user = User.objects.create_user(**validated_data)
-        Wallet.objects.create(user=user)
-        return user
+        return User.objects.create_user(**validated_data)

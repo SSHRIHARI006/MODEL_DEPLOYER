@@ -1,4 +1,8 @@
-from .settings import *
+import os
+
+os.environ.setdefault("DJANGO_SECRET_KEY", "test-insecure-secret-key")
+
+from .settings import *  # noqa: E402,F403
 
 DEBUG = False
 
