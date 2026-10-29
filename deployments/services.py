@@ -8,10 +8,22 @@ from django.utils import timezone
 
 from runners.factory import RunnerFactory
 
+from core.runner_errors import NON_RETRYABLE_CODES
+
 from .models import Deployment
 
 
-class RetryableDeploymentError(RuntimeError):
+class DeploymentBuildError(RuntimeError):
+    def __init__(self, message: str, code: str = "RUNNER_INTERNAL"):
+        super().__init__(message)
+        self.code = code
+
+
+class RetryableDeploymentError(DeploymentBuildError):
+    pass
+
+
+class NonRetryableDeploymentError(DeploymentBuildError):
     pass
 
 
@@ -56,26 +68,40 @@ def _build_and_run_deployment(deployment_id: str):
 
     init_result = runner.init_environment(
         {
-            "model_id": str(model.id),
+            # A runtime is tied to an immutable version, not the mutable model.
+            # This keeps local artifacts, venvs, and warm processes isolated when
+            # different versions are deployed concurrently.
+            "model_id": str(deployment.model_version_id),
             "manifest_path": manifest_path,
         }
     )
-    if init_result.status_code >= 500:
-        raise RetryableDeploymentError(init_result.data)
-    if init_result.status_code >= 400:
-        raise RuntimeError(init_result.data)
+    if init_result.status_code != 200:
+        data = init_result.data if isinstance(init_result.data, dict) else {}
+        detail = data.get("detail") if isinstance(data.get("detail"), dict) else data
+        err_code = detail.get("code") or data.get("code") or "RUNNER_INTERNAL"
+        err_msg = detail.get("error") or detail.get("message") or str(init_result.data)
+        retryable = bool(detail.get("retryable", False))
+        if err_code in NON_RETRYABLE_CODES:
+            retryable = False
 
-    deadline = time.time() + 60
+        if retryable:
+            raise RetryableDeploymentError(err_msg, code=err_code)
+        raise NonRetryableDeploymentError(err_msg, code=err_code)
+
+    deadline = time.time() + getattr(runner, "healthcheck_timeout_seconds", 30)
     health_ok = False
     while time.time() < deadline:
-        health_result = runner.healthcheck()
-        if health_result.status_code == 200:
+        if hasattr(runner, "readiness"):
+            ready_result = runner.readiness()
+        else:
+            ready_result = runner.healthcheck()
+        if ready_result.status_code == 200:
             health_ok = True
             break
         time.sleep(0.5)
 
     if not health_ok:
-        raise RetryableDeploymentError("Runner healthcheck timed out")
+        raise RetryableDeploymentError("Runner readiness check timed out", code="RUNNER_WORKER_TIMEOUT")
 
     with transaction.atomic():
         deployment = Deployment.objects.select_for_update().select_related(

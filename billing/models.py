@@ -26,9 +26,11 @@ class LedgerTransaction(models.Model):
 
     class TransactionType(models.TextChoices):
         INFERENCE = "INFERENCE", "Inference Charge"
+        REFUND = "REFUND", "Inference Refund"
         DEPOSIT = "DEPOSIT", "Wallet Credit Deposit"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference_id = models.CharField(max_length=64, blank=True, null=True, db_index=True)
 
     consumer = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -46,7 +46,8 @@ def test_metrics_overview_aggregates(auth_client, user, model_obj):
     assert res.data["error_count"] == 1
     assert res.data["success_rate"] == pytest.approx(66.67, abs=0.01)
     assert res.data["avg_latency_ms"] == pytest.approx(116.667, abs=0.01)
-    assert res.data["p95_latency_ms"] == pytest.approx(100.0, abs=0.01)
+    # OBS-01: Standard linear interpolation percentile for [50, 100, 200] at p95 is 190.0
+    assert res.data["p95_latency_ms"] == pytest.approx(190.0, abs=0.01)
 
 
 def test_model_metrics_only_owner_data(

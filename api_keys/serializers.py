@@ -8,6 +8,8 @@ class APIKeyCreateSerializer(serializers.Serializer):
 
 
 class APIKeyListSerializer(serializers.ModelSerializer):
+    """Listing never exposes the key material, only a display prefix (SEC-07)."""
+
     class Meta:
         model = APIKey
-        fields = ["id", "name", "model_id", "is_active", "created_at"]
+        fields = ["id", "name", "model_id", "key_prefix", "is_active", "created_at"]

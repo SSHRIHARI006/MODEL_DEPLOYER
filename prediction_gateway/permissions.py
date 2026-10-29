@@ -1,5 +1,5 @@
 from rest_framework.permissions import BasePermission
-from api_keys.models import APIKey
+from api_keys.models import APIKey, hash_api_key
 
 
 class HasValidModelAPIKey(BasePermission):
@@ -13,8 +13,10 @@ class HasValidModelAPIKey(BasePermission):
             return False
 
         try:
+            # SEC-07: keys are stored as digests, so the presented value is
+            # hashed and looked up. The plaintext never touches the database.
             key_obj = APIKey.objects.get(
-                key=api_key,
+                key_hash=hash_api_key(api_key),
                 is_active=True,
                 model_id=model_id,
             )

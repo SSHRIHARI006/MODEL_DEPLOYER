@@ -27,8 +27,8 @@ export function ModelRepo() {
   const { namespace, model_name } = useParams();
   const { wallet, username: currentUser } = useStore();
   
-  if (!namespace?.startsWith('@')) return <Navigate to="/404" replace />;
-  const owner_username = namespace.substring(1);
+  const isNamespaceValid = Boolean(namespace?.startsWith('@'));
+  const owner_username = isNamespaceValid ? namespace!.substring(1) : '';
   
   const [model, setModel] = useState<ModelDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +48,10 @@ export function ModelRepo() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!isNamespaceValid) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     api.get<ModelDetail>(`/models/@${owner_username}/${model_name}/`)
       .then(res => { 
@@ -60,7 +64,9 @@ export function ModelRepo() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [owner_username, model_name]);
+  }, [isNamespaceValid, owner_username, model_name]);
+
+  if (!isNamespaceValid) return <Navigate to="/404" replace />;
 
   const handleRunInference = async () => {
     if (!model) return;
@@ -172,7 +178,7 @@ export function ModelRepo() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      code({node, inline, className, children, ...props}: any) {
+                      code({_node, inline, className, children, ...props}: any) {
                         const match = /language-(\w+)/.exec(className || '')
                         return !inline && match ? (
                           <SyntaxHighlighter style={github as any} language={match[1]} PreTag="div" {...props}>

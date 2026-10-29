@@ -10,6 +10,8 @@ from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
+from runners.auth import check_auth_configuration
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -42,10 +44,19 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+    "EXCEPTION_HANDLER": "core.errors.api_exception_handler",
     "DEFAULT_THROTTLE_RATES": {
         "predict": "20/min",
+        "auth": "10/min",
+        "upload": "10/min",
+        "keys": "20/min",
+        "deposit": "5/min",
     },
 }
+
+# SEC-07: scoped throttling is on by default; turn it off only deliberately
+# (the test suite, or a deployment that rate limits in its own reverse proxy).
+THROTTLING_ENABLED = os.getenv("THROTTLING_ENABLED", "true").lower() == "true"
 
 CACHES = {
     "default": {
@@ -63,20 +74,92 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 
+# REL-01/REL-03: worker-side subprocess and concurrency behavior is bounded by
+# env-driven caps. The worker process enforces per-action timeouts, process-group
+# termination, output caps, and in-process semaphores for concurrent builds and
+# predictions.
+
+# Celery task bounds so a worker does not keep modifying a deployment after the
+# control plane has given up.
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "600"))
+CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "900"))
+CELERY_WORKER_CONCURRENCY = int(os.getenv("CELERY_WORKER_CONCURRENCY", "2"))
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
     "AUTH_HEADER_TYPES": ("Bearer",),
+    # SEC-07: refresh rotation + revocation. A rotated refresh token invalidates
+    # its predecessor, so a leaked token cannot be replayed once the legitimate
+    # client refreshes, and logout can revoke a token outright.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 # Runtime guardrails
 MAX_MODEL_ZIP_BYTES = int(os.getenv("MAX_MODEL_ZIP_BYTES", 50 * 1024 * 1024))  # 50 MB
+
+# SEC-04: uploaded archives are attacker-controlled. These are checked against
+# the ZIP metadata before extraction and enforced again while writing bytes.
+MAX_MODEL_UNCOMPRESSED_BYTES = int(
+    os.getenv("MAX_MODEL_UNCOMPRESSED_BYTES", 200 * 1024 * 1024)
+)  # 200 MB
+MAX_MODEL_ENTRY_BYTES = int(os.getenv("MAX_MODEL_ENTRY_BYTES", 50 * 1024 * 1024))  # 50 MB
+MAX_MODEL_ARCHIVE_ENTRIES = int(os.getenv("MAX_MODEL_ARCHIVE_ENTRIES", 512))
+MAX_MODEL_PATH_LENGTH = int(os.getenv("MAX_MODEL_PATH_LENGTH", 200))
+# Maximum expansion factor for a single entry; 0 disables the check.
+MAX_MODEL_COMPRESSION_RATIO = float(os.getenv("MAX_MODEL_COMPRESSION_RATIO", 100))
+
+# SEC-03: an uploaded model is code this platform installs and executes, so keep
+# uploads invite/staff-approved until a per-model sandbox exists. Set to false
+# only for a deployment where arbitrary uploads are acceptable.
+UPLOAD_APPROVAL_REQUIRED = (
+    os.getenv("UPLOAD_APPROVAL_REQUIRED", "true").lower() == "true"
+)
 INFERENCE_TIMEOUT_SECONDS = int(os.getenv("INFERENCE_TIMEOUT_SECONDS", 15))
+
+# REL-01: separate timeouts for runner actions. No single timeout is reused for
+# init, predict, health, and command paths anymore.
+RUNNER_BASE_URL = os.getenv("RUNNER_BASE_URL", "http://localhost:8002")
+RUNNER_INIT_TIMEOUT_SECONDS = int(os.getenv("RUNNER_INIT_TIMEOUT_SECONDS", "300"))
+RUNNER_PREDICT_TIMEOUT_SECONDS = int(os.getenv("RUNNER_PREDICT_TIMEOUT_SECONDS", "15"))
+RUNNER_HEALTHCHECK_TIMEOUT_SECONDS = int(os.getenv("RUNNER_HEALTHCHECK_TIMEOUT_SECONDS", "30"))
+RUNNER_COMMAND_TIMEOUT_SECONDS = int(os.getenv("RUNNER_COMMAND_TIMEOUT_SECONDS", "60"))
+RUNNER_MAX_OUTPUT_BYTES = int(os.getenv("RUNNER_MAX_OUTPUT_BYTES", str(128 * 1024)))
+RUNNER_MAX_CONCURRENT_BUILDS = int(os.getenv("RUNNER_MAX_CONCURRENT_BUILDS", "1"))
+RUNNER_MAX_CONCURRENT_PREDICTIONS = int(os.getenv("RUNNER_MAX_CONCURRENT_PREDICTIONS", "8"))
+
+# Legacy runner URL settings are retained for a transition window only.
 RUNNER_SKLEARN_URL = os.getenv("RUNNER_SKLEARN_URL", "http://localhost:8002")
 RUNNER_PYTORCH_URL = os.getenv("RUNNER_PYTORCH_URL", "http://localhost:8002")
+
+# Internal runner authentication (SEC-02). The same shared secret is configured
+# on the API/Celery containers and on the runner container; the runner refuses
+# to start without it. Fail closed here too, so a non-development deployment
+# cannot boot with the internal endpoints effectively unprotected.
+RUNNER_AUTH_TOKEN = os.getenv("RUNNER_AUTH_TOKEN", "").strip()
+RUNNER_AUTH_HEADER = os.getenv("RUNNER_AUTH_HEADER", "X-Runner-Token")
+RUNNER_ALLOW_UNAUTHENTICATED = (
+    os.getenv("RUNNER_ALLOW_UNAUTHENTICATED", "false").lower() == "true"
+)
+check_auth_configuration(
+    token=RUNNER_AUTH_TOKEN,
+    debug=DEBUG,
+    allow_unauthenticated=RUNNER_ALLOW_UNAUTHENTICATED,
+    service="Django control plane",
+)
 
 # Billing (simplified credit system — no real money anywhere)
 BILLING_ENABLED = os.getenv("BILLING_ENABLED", "false").lower() == "true"
 BILLING_STARTING_CREDITS = Decimal(os.getenv("BILLING_STARTING_CREDITS", "100"))
+
+# SEC-05: deposits mint simulated credits, so they are off unless explicitly
+# enabled, and even then restricted to staff (or a DEBUG deployment).
+BILLING_DEMO_DEPOSITS = (
+    os.getenv("BILLING_DEMO_DEPOSITS", "false").lower() == "true"
+)
+BILLING_MAX_DEPOSIT_AMOUNT = Decimal(
+    os.getenv("BILLING_MAX_DEPOSIT_AMOUNT", "10000")
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -86,6 +169,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "users",
     "api_keys",

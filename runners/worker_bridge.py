@@ -47,10 +47,50 @@ def main() -> int:
         sys.stderr.write("model artifact not found\n")
         return 1
 
+    _sanitize_sys_path()
+
+    if "--serve-ipc" in sys.argv:
+        try:
+            model = joblib.load(artifact_path)
+            sys.stdout.write(json.dumps({"status": "ready"}) + "\n")
+            sys.stdout.flush()
+        except Exception as exc:
+            sys.stderr.write(f"failed to load model: {exc}\n")
+            return 1
+
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            if line == "PING":
+                sys.stdout.write("PONG\n")
+                sys.stdout.flush()
+                continue
+            try:
+                req_payload = json.loads(line)
+                instances = req_payload.get("instances", [])
+                df = pd.DataFrame(instances)
+                preds = model.predict(df).tolist()
+                probs = None
+                if hasattr(model, "predict_proba"):
+                    probs = model.predict_proba(df).tolist()
+                out = {"predictions": preds, "probabilities": probs, "metadata": {}}
+                sys.stdout.write(json.dumps(out) + "\n")
+            except Exception as exc:
+                sys.stdout.write(json.dumps({"error": str(exc)}) + "\n")
+            sys.stdout.flush()
+        return 0
+
     raw = sys.stdin.read() or "{}"
     payload = json.loads(raw)
-    instances = payload.get("instances", [])
 
+    if payload.get("validate_only", False):
+        _sanitize_sys_path()
+        model = joblib.load(artifact_path)
+        sys.stdout.write(json.dumps({"status": "validated", "model": str(type(model))}))
+        return 0
+
+    instances = payload.get("instances", [])
     df = pd.DataFrame(instances)
     _sanitize_sys_path()
     model = joblib.load(artifact_path)

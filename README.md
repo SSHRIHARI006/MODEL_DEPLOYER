@@ -1,146 +1,131 @@
-# Model Deployer
+# ModelDeploy
 
-## PROJECT VISION & OVERVIEW
+ModelDeploy is a Django/React platform for registering machine-learning model bundles, managing immutable model versions, deploying them asynchronously, and exposing authenticated inference APIs. It is intended for local development and controlled self-hosting; it is not currently a safe public multi-tenant execution service.
 
-Model Deployer is a developer-first platform for deploying machine learning models as isolated API endpoints: a GitHub for ML models. It provides upload, versioning, deployment, and inference routing through secure, containerized runtimes while keeping the control plane simple and auditable.
+## What is implemented
 
-## ARCHITECTURE & INFRASTRUCTURE
+- Model upload with archive and manifest validation.
+- Immutable model versions and deployment lifecycle APIs.
+- JWT authentication, model-scoped API keys, and universal API keys.
+- Django REST Framework control plane with Celery/Redis-backed deployment tasks.
+- MinIO or S3-compatible artifact storage.
+- FastAPI runner bridges for supported scikit-learn and PyTorch artifacts.
+- React/TypeScript console for discovery, model management, deployments, keys, and inference testing.
+- Optional credit-ledger billing and monitoring endpoints.
+- Backup/restore scripts and a deployment runbook under [docs/](docs/).
 
-**Tech stack**
+## Architecture
 
-- Django + Django REST Framework for the control plane and APIs.
-- PostgreSQL as the primary database (SQLite fallback for local development), with Redis for caching and the Celery broker.
-- Celery for durable, asynchronous deployment builds.
-- MinIO (S3 API) for model artifact storage.
-- SimpleJWT for authentication.
-- React 19 + TypeScript + Vite + Tailwind for the console.
-- Pytest for API and integration testing.
-
-**Dynamic runner environments**
-
-The platform builds and runs model environments dynamically using an isolated FastAPI runner worker. The control plane negotiates with the runner service to:
-
-- Build isolated `uv` virtual environments from user-provided artifacts (`model.yaml`, `requirements.txt`).
-- Start FastAPI inference servers natively bound to internal ports.
-- Stream build logs and error tracebacks dynamically to the database.
-- Track runtime metadata (runner URL, port, process state) in the `Deployment` model.
-
-Inference traffic is proxied from the API gateway to the active deployment's internal URL. The deployment lifecycle is tracked in [deployments/models.py](deployments/models.py) with a guarded state machine.
-
-**Frontend console**
-
-The console is a React single-page app served as a static build (`frontend/`), talking to the API under `/api`:
-- Public model explorer (`/`), user profiles (`/<username>`), and per-model pages (`/<username>/<model_name>`).
-- Authenticated dashboard (`/dashboard`) for uploads, deployments, deploy logs, API keys, and interactive inference testing.
-- In-app API reference at `/docs`.
-- Token-based auth stored client-side, with automatic redirect on `401`.
-
-## CORE API DESIGN
-
-**Authentication**
-
-- `POST /api/auth/register/` — Register user
-- `POST /api/auth/login/` — Obtain JWT access/refresh tokens
-- `POST /api/auth/refresh/` — Refresh access token
-
-**Model registry**
-
-- `POST /api/models/upload/` — Upload a model package (JWT required)
-- `DELETE /api/models/<model_id>/` — Delete a model and wipe storage artifacts
-
-**API keys**
-
-- `GET /api/keys/` — List API keys for current user
-- `POST /api/keys/` — Create API key for owned model
-- `POST /api/keys/<key_id>/deactivate/` — Deactivate API key
-
-**Deployments**
-
-- `POST /api/deployments/` — Create a deployment (async build/run; returns 202)
-- `GET /api/deployments/<deployment_id>/` — Deployment status/details
-
-**Prediction gateway**
-
-- `POST /api/predict/<model_id>/` — Run inference (requires BOTH JWT + `X-API-Key`)
-- `POST /api/v1/inference/@<username>/<model_name>/` — Run inference by public address (JWT or a universal `md_live_...` API key); charges and credits are applied when billing is enabled
-- `POST /api/keys/universal/` — Create a universal API key that works across models
-
-**Monitoring**
-
-- `GET /api/metrics/overview/` — Global usage and performance overview
-- `GET /api/metrics/models/<model_id>/` — Per-model usage, performance, and build logs
-- `GET /api/metrics/dashboard/summary/` — Dashboard summary counters
-- `GET /api/metrics/dashboard/recent-predictions/` — Recent prediction activity
-- `GET /api/metrics/dashboard/models/` — User model list with quick stats
-- `GET /api/metrics/health/` — Service health (includes DB check)
-
-**Prediction flow**
-
-1. Client sends `POST /api/predict/<model_id>/` with JWT + `X-API-Key` (or calls the universal `@username/model` endpoint).
-2. API gateway serves a Redis-cached response when the same model version and payload were seen within `PREDICTION_CACHE_TTL_SECONDS`.
-3. On a miss it selects the latest RUNNING deployment for the model and proxies the payload to the runner's `/predict` endpoint.
-4. The response is cached, returned to the client, and a `PredictionLog` is persisted.
-5. Gateway maps upstream errors to HTTP 502/503/504.
-
-## LOCAL SETUP & TESTING
-
-### 1. Clone the repository
-
-```
-git clone <repository-url>
-cd MODEL_DEPLOYER
+```text
+React/Vite console ──> Django/DRF API ──> PostgreSQL
+                              │
+                              ├── Celery ──> Redis
+                              ├── MinIO/S3 artifact storage
+                              └── FastAPI runner ──> model subprocesses
 ```
 
-### 2. Run with Docker Compose
+The runner currently installs each model's declared dependencies into a virtual environment and loads the artifact through the supported bridge. Cold subprocess execution has bounded time and output limits; warm IPC runtimes are opt-in and disabled by default.
 
-The easiest way to spin up the entire stack (PostgreSQL, Redis, MinIO, API Gateway, Worker, and Frontend) is using Docker Compose:
+## Security limitation
 
+Uploaded requirements, Python modules, joblib/pickle artifacts, and full PyTorch artifacts are executable code. The current Compose deployment runs them inside a shared worker container and network boundary. Virtual environments, filtered environment variables, read-only object-storage credentials, and subprocess timeouts do not provide OS-level tenant isolation.
+
+Keep `UPLOAD_APPROVAL_REQUIRED=true` and restrict uploads to trusted or explicitly approved users. Do not use this repository as a public arbitrary-code model-hosting service until model builds and inference run in a separately reviewed per-model container, gVisor sandbox, or microVM with enforced filesystem, network, credential, and resource boundaries. See [docs/security.md](docs/security.md).
+
+## Repository layout
+
+- `authentication/`, `users/`, `api_keys/`: accounts and authentication.
+- `model_registry/`: model bundles, manifests, versions, and artifact storage.
+- `deployments/`: deployment state and Celery build tasks.
+- `prediction_gateway/`: authenticated inference and billing paths.
+- `monitoring/`: health and usage metrics.
+- `runners/`: FastAPI runner, framework bridges, and runner clients.
+- `core/`: archive validation, storage helpers, errors, and throttling.
+- `frontend/`: React/Vite console.
+- `tests/` and app-local `*/tests/`: unit, contract, and integration tests.
+- `deploy/` and `docker-compose.yml`: self-hosting configuration.
+
+## Prerequisites
+
+For the supported development setup, use Python 3.12+, Node.js 22+, npm, and Docker Engine with the Compose plugin. PostgreSQL, Redis, and MinIO are provided by Compose. A host running model dependencies needs additional CPU, memory, and disk beyond the base services.
+
+## Local setup
+
+Create a sanitized environment file and replace every placeholder:
+
+```sh
+cp .env.example .env
+docker compose config -q
+docker compose up --build -d
 ```
-docker compose up --build
-```
 
-The services will be available at:
-- **Frontend Console**: `http://localhost:80`
-- **API Gateway**: `http://localhost:8000`
+The API is bound to `127.0.0.1:8000` by default and the console to `127.0.0.1:80`. PostgreSQL, Redis, MinIO, and the runner are internal Compose services. Create an administrator after the API is healthy:
 
-PostgreSQL, Redis, MinIO, and the inference worker are internal to the Compose network; see `SELF_HOSTING.md` for debugging access.
-
-### 3. Create an administrator and populate dummy data (Optional)
-
-Migrations run automatically from the API container's entrypoint.
-
-```
+```sh
 docker compose exec api python manage.py createsuperuser
-docker compose exec api python populate_db.py
 ```
 
-### 4. Run tests
+For a host-only backend/frontend workflow, install the locked dependencies, apply migrations, and run the services separately:
 
-Run the test suite from a checkout with `uv` (uses SQLite and in-memory caches):
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver 127.0.0.1:8000
 
+cd frontend
+npm ci
+npm run dev
 ```
-uv run pytest
+
+The complete environment surface is documented in [.env.example](.env.example). Production deployments should use strong secrets, `DJANGO_DEBUG=false`, explicit allowed hosts and CORS origins, authenticated Redis, and a reverse proxy for TLS. See [SELF_HOSTING.md](SELF_HOSTING.md).
+
+## API examples
+
+Register and log in through `/api/auth/register/` and `/api/auth/login/`, then upload an approved model bundle containing `model.yaml`, its declared requirements file, and its artifact:
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/models/upload/ \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -F file=@model.zip
 ```
 
-## CURRENT STATUS
+Deploy the returned model version and poll its deployment until it reaches a terminal state:
 
-- One `docker-compose.yml` runs the whole stack for local development, self-hosting, and the VPS deploy: PostgreSQL, Redis, MinIO (bucket auto-created), the Django API, a Celery worker, the FastAPI inference runner, and the frontend.
-- Deployments run as Celery tasks and survive an API restart; predictions are cached in Redis per model version.
-- The deployment state machine, proxy routing, and API-key scopes are implemented and hardened; see `SELF_HOSTING.md` for configuration and known limitations.
-- The suite passes locally (`uv run pytest`), and a 20-model sklearn/PyTorch zoo has been validated end-to-end (upload → deploy → predict) with results in `test_models/results/`.
+```sh
+curl -X POST http://127.0.0.1:8000/api/deployments/ \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model_version_id":"MODEL_VERSION_ID"}'
+```
 
-## THE ROADMAP
+The direct prediction route requires a JWT and model-scoped API key:
 
-**Short-term**
+```sh
+curl -X POST http://127.0.0.1:8000/api/predict/MODEL_ID/ \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "X-API-Key: MODEL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"instances":[{"feature":1.2}]}'
+```
 
-- Deploy the compose stack to the production VPS behind a TLS-terminating reverse proxy.
+The universal inference route supports the documented JWT/universal-key contract in [docs/auth_contracts.md](docs/auth_contracts.md). Model input and output compatibility remains model-dependent.
 
-**Mid-term**
+## Verification
 
-- Expand `runners` adapters to natively support TensorFlow model payloads.
+Useful non-destructive checks are:
 
-**Long-term**
+```sh
+DJANGO_SETTINGS_MODULE=config.settings_test .venv/bin/python manage.py check
+DJANGO_SETTINGS_MODULE=config.settings_test .venv/bin/python manage.py makemigrations --check --dry-run
+.venv/bin/pytest
+cd frontend && npm run lint && npx tsc --noEmit && npm test && npm run build
+```
 
-- Production deployment on bare-metal VPS with Traefik/Nginx.
-- Prometheus observability and structured service metrics.
-- Integration with an autonomous AIOps/DevOps management agent.
+Historical test-result files and model-zoo outputs are intentionally not part of the public source tree. Run the relevant checks in the exact checkout being reviewed; do not infer release readiness from old reports.
+
+## Status and roadmap
+
+The application features and local test suites are actively developed. Real PostgreSQL/Redis/MinIO integration, production lifecycle behavior, full model-zoo execution, and browser journeys against a live backend require separate environment verification. The highest-priority roadmap item is replacing the shared model worker with a genuinely isolated per-model execution boundary before enabling public uploads.
+
+There is currently no published license or contribution policy in this repository. Add those before representing the project as an open-source release.

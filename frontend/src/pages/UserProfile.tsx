@@ -7,7 +7,6 @@ import { Book, Calendar } from 'lucide-react';
 
 interface UserProfileData {
   username: string;
-  email: string;
   bio: string;
   avatar_url: string;
   joined: string;
@@ -17,17 +16,18 @@ interface UserProfileData {
 
 export function UserProfile() {
   const { namespace } = useParams();
-  
-  if (!namespace?.startsWith('@')) {
-    return <Navigate to="/404" replace />;
-  }
-  
-  const username = namespace.substring(1);
+  const isNamespaceValid = Boolean(namespace?.startsWith('@'));
+  const username = isNamespaceValid ? namespace!.substring(1) : '';
+
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isNamespaceValid) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     api.get<UserProfileData>(`/users/@${username}/`)
       .then(res => {
@@ -36,7 +36,11 @@ export function UserProfile() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [username]);
+  }, [isNamespaceValid, username]);
+
+  if (!isNamespaceValid) {
+    return <Navigate to="/404" replace />;
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>

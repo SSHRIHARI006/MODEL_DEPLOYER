@@ -1,0 +1,35 @@
+name: Nightly / Release Gate
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly-suite:
+    name: Model Zoo & Failure Injection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-django
+
+      - name: Run Failure Injection Suite
+        run: |
+          pytest -m failure_injection --junitxml=test-results/junit-failure-injection.xml
+
+      - name: Model zoo is a manual/release gate
+        run: |
+          echo "Full model-zoo deployment requires a running isolated test stack and is not executed by this dependency-light nightly job."
+          echo "Run test_models/run_all.py against a disposable integration environment as a separate release gate."

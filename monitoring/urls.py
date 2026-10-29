@@ -5,12 +5,18 @@ from .views import (
     DashboardRecentPredictionsAPIView,
     DashboardSummaryAPIView,
     HealthAPIView,
+    LiveHealthAPIView,
     MetricsOverviewAPIView,
     ModelMetricsAPIView,
+    ReadyHealthAPIView,
+    StaffGlobalMetricsAPIView,
 )
 
 urlpatterns = [
+    path("live/", LiveHealthAPIView.as_view(), name="live-health"),
+    path("ready/", ReadyHealthAPIView.as_view(), name="ready-health"),
     path("health/", HealthAPIView.as_view(), name="health"),
+    path("global/", StaffGlobalMetricsAPIView.as_view(), name="metrics-global"),
     path("overview/", MetricsOverviewAPIView.as_view(), name="metrics-overview"),
     path(
         "models/<str:model_id>/", ModelMetricsAPIView.as_view(), name="metrics-by-model"

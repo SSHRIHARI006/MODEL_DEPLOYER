@@ -1,21 +1,46 @@
-import uuid
-import secrets
 import hashlib
-from django.db import models
+import secrets
+import uuid
+
 from django.conf import settings
+from django.db import models
+
 from model_registry.models import Model
 
+# 32 random bytes -> 64 hex characters of entropy in the raw key.
+KEY_BYTES = 32
+KEY_PREFIX_LENGTH = 8
 
-def generate_api_key():
-    return secrets.token_hex(32)
+
+def generate_api_key() -> str:
+    return secrets.token_hex(KEY_BYTES)
+
+
+def hash_api_key(raw_key: str) -> str:
+    """SHA-256 digest of a raw key. Only the digest is ever stored (SEC-07)."""
+    return hashlib.sha256(str(raw_key).encode("utf-8")).hexdigest()
+
+
+def hashed_key_fields(raw_key: str) -> dict[str, str]:
+    """The stored representation of a raw key: digest plus a display prefix."""
+    return {
+        "key_hash": hash_api_key(raw_key),
+        "key_prefix": raw_key[:KEY_PREFIX_LENGTH],
+    }
 
 
 class APIKey(models.Model):
-    """Legacy model-specific API key (preserved for backward compatibility)."""
+    """Model-specific API key.
+
+    SEC-07: the key is hashed at rest. There is no plaintext column, so a
+    database dump cannot be replayed as a credential. The raw value exists only
+    on the instance that generated it, long enough to be returned once.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    key = models.CharField(max_length=64, unique=True, blank=True)
+    key_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    key_prefix = models.CharField(max_length=12, blank=True, default="")
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     model = models.ForeignKey(Model, on_delete=models.CASCADE)
@@ -26,9 +51,16 @@ class APIKey(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set only for the instance that generated the key; never persisted.
+        self.raw_key: str | None = None
+
     def save(self, *args, **kwargs):
-        if not self.key:
-            self.key = generate_api_key()
+        if not self.key_hash:
+            self.raw_key = generate_api_key()
+            for field, value in hashed_key_fields(self.raw_key).items():
+                setattr(self, field, value)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -64,4 +96,3 @@ class UniversalAPIKey(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.prefix}...)"
-

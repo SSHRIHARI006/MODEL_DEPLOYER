@@ -104,5 +104,39 @@ temp/
 # Generated model zoo reports
 test_models/results/
 
+# Local model-zoo artifacts. Keep harness and manifests locally, but do not
+# publish generated checkpoints, datasets, notebooks, or archives.
+*.pkl
+*.pt
+*.ipynb
+test_models/**/data.*
+test_models/**/*.zip
+
+# Generated test evidence and browser reports
+test-results/
+frontend/playwright-report/
+frontend/test-results/
+
+# Local build/deployment artifacts
+backups/
+*.dump
+*.tar.gz
+*.tgz
+*.sqlite3
+*.sqlite3-*
+
 .commandcode/
+
+# Internal specifications, planning notes, and audit/handoff material.
+# Public README.md and intentional files under docs/ remain trackable.
 specs/
+plan/
+spec5_inventory/
+spec5_work/
+docs/pre-release-audit.md
+
+# Local planning/spec documents (kept out of version control)
+final_touches.md
+
+PROJECT.md
+/audit_preort.md

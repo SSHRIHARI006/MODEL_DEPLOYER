@@ -14,8 +14,16 @@ class APIKeyAdmin(admin.ModelAdmin):
 
     activate_keys.short_description = "Activate selected API keys"
 
-    readonly_fields = ("key",)
-    list_display = ("name", "user", "model", "is_active", "created_at")
+    # SEC-07: only a hash is stored, so there is no key material to display.
+    readonly_fields = ("key_hash", "key_prefix", "created_at")
+    list_display = (
+        "name",
+        "key_prefix",
+        "user",
+        "model",
+        "is_active",
+        "created_at",
+    )
     list_filter = ("is_active", "created_at")
     search_fields = ("name", "user__email", "model__name", "model__id")
     actions = ("deactivate_keys", "activate_keys")

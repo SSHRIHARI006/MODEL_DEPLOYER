@@ -101,6 +101,73 @@ def _load_model(manifest: dict, manifest_path: Path):
     return model_instance, device
 
 
+def _run_inference_on_instances(model, device, manifest: dict, instances: list) -> dict:
+    import torch
+    input_type = manifest.get("input_type", "tabular")
+
+    if input_type == "tabular":
+        rows = []
+        for inst in instances:
+            if isinstance(inst, dict):
+                rows.append(list(inst.values()))
+            elif isinstance(inst, list):
+                rows.append(inst)
+            else:
+                rows.append([inst])
+        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
+
+    elif input_type == "sequence":
+        rows = []
+        for inst in instances:
+            if isinstance(inst, dict):
+                rows.append(list(inst.values()))
+            elif isinstance(inst, list):
+                rows.append(inst)
+            else:
+                rows.append([inst])
+        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
+        if tensor_input.dim() == 2:
+            tensor_input = tensor_input.unsqueeze(-1)
+
+    elif input_type == "image_1d":
+        rows = []
+        for inst in instances:
+            if isinstance(inst, dict):
+                rows.append(list(inst.values()))
+            elif isinstance(inst, list):
+                rows.append(inst)
+            else:
+                rows.append([inst])
+        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
+        if tensor_input.dim() == 2:
+            tensor_input = tensor_input.unsqueeze(1)
+    else:
+        raise ValueError(f"unsupported input_type: {input_type}")
+
+    with torch.no_grad():
+        raw_output = model(tensor_input)
+
+    predictions = raw_output.cpu().numpy().tolist()
+    task_type = manifest.get("task_type", "regression")
+    probabilities = None
+
+    if task_type == "classification":
+        import torch.nn.functional as F
+        probs = F.softmax(raw_output, dim=-1)
+        probabilities = probs.cpu().numpy().tolist()
+        predictions = raw_output.argmax(dim=-1).cpu().numpy().tolist()
+    elif task_type == "binary_classification":
+        probs = torch.sigmoid(raw_output)
+        probabilities = probs.cpu().numpy().tolist()
+        predictions = (probs > 0.5).int().cpu().numpy().tolist()
+
+    return {
+        "predictions": predictions,
+        "probabilities": probabilities,
+        "metadata": {},
+    }
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         sys.stderr.write("manifest path required\n")
@@ -121,98 +188,45 @@ def main() -> int:
         sys.stderr.write("manifest must be a yaml object\n")
         return 1
 
+    _sanitize_sys_path()
+    model, device = _load_model(manifest, manifest_path)
+
+    if "--serve-ipc" in sys.argv:
+        sys.stdout.write(json.dumps({"status": "ready"}) + "\n")
+        sys.stdout.flush()
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            if line == "PING":
+                sys.stdout.write("PONG\n")
+                sys.stdout.flush()
+                continue
+            try:
+                payload = json.loads(line)
+                instances = payload.get("instances", [])
+                out = _run_inference_on_instances(model, device, manifest, instances)
+                sys.stdout.write(json.dumps(out) + "\n")
+            except Exception as exc:
+                sys.stdout.write(json.dumps({"error": str(exc)}) + "\n")
+            sys.stdout.flush()
+        return 0
+
     raw = sys.stdin.read() or "{}"
     payload = json.loads(raw)
     instances = payload.get("instances", [])
 
-    _sanitize_sys_path()
+    if payload.get("validate_only", False):
+        sys.stdout.write(json.dumps({"status": "validated", "model": str(type(model))}))
+        return 0
 
-    import torch
-
-    model, device = _load_model(manifest, manifest_path)
-
-    # Determine input shape handling from manifest
-    input_type = manifest.get("input_type", "tabular")  # tabular, sequence, image_1d
-
-    if input_type == "tabular":
-        # Flat feature vectors: [[f1, f2, ...], ...]
-        rows = []
-        for inst in instances:
-            if isinstance(inst, dict):
-                rows.append(list(inst.values()))
-            elif isinstance(inst, list):
-                rows.append(inst)
-            else:
-                rows.append([inst])
-        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
-
-    elif input_type == "sequence":
-        # Sequential data: instances is a list of sequences
-        # Each instance is a list of timestep feature vectors
-        rows = []
-        for inst in instances:
-            if isinstance(inst, dict):
-                rows.append(list(inst.values()))
-            elif isinstance(inst, list):
-                rows.append(inst)
-            else:
-                rows.append([inst])
-        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
-        # Reshape to (batch, seq_len, features) if needed
-        if tensor_input.dim() == 2:
-            tensor_input = tensor_input.unsqueeze(-1)
-
-    elif input_type == "image_1d":
-        # 1D signal data treated as Conv1d input: (batch, channels, length)
-        rows = []
-        for inst in instances:
-            if isinstance(inst, dict):
-                rows.append(list(inst.values()))
-            elif isinstance(inst, list):
-                rows.append(inst)
-            else:
-                rows.append([inst])
-        tensor_input = torch.tensor(rows, dtype=torch.float32).to(device)
-        # Conv1d expects (batch, channels, length)
-        if tensor_input.dim() == 2:
-            tensor_input = tensor_input.unsqueeze(1)
-
-    else:
-        sys.stderr.write(f"unsupported input_type: {input_type}\n")
+    try:
+        output = _run_inference_on_instances(model, device, manifest, instances)
+        sys.stdout.write(json.dumps(output))
+        return 0
+    except ValueError as exc:
+        sys.stderr.write(f"{exc}\n")
         return 1
-
-    # Run inference
-    with torch.no_grad():
-        raw_output = model(tensor_input)
-
-    # Convert output to JSON-safe format
-    predictions = raw_output.cpu().numpy().tolist()
-
-    # Determine if we should compute probabilities
-    task_type = manifest.get("task_type", "regression")
-    probabilities = None
-
-    if task_type == "classification":
-        import torch.nn.functional as F
-
-        probs = F.softmax(raw_output, dim=-1)
-        probabilities = probs.cpu().numpy().tolist()
-        # For classification, return predicted class indices
-        predictions = raw_output.argmax(dim=-1).cpu().numpy().tolist()
-
-    elif task_type == "binary_classification":
-        probs = torch.sigmoid(raw_output)
-        probabilities = probs.cpu().numpy().tolist()
-        predictions = (probs > 0.5).int().cpu().numpy().tolist()
-
-    output = {
-        "predictions": predictions,
-        "probabilities": probabilities,
-        "metadata": {},
-    }
-
-    sys.stdout.write(json.dumps(output))
-    return 0
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ import zipfile
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from django.contrib.auth import get_user_model
+
 from deployments.models import Deployment
 from runners.base import RunnerResult
 
@@ -33,6 +35,10 @@ def test_full_flow_register_login_upload_key_predict(api_client, monkeypatch):
         format="json",
     )
     assert reg.status_code in (200, 201)
+
+    # SEC-03: uploads are invite-only, so approve the fresh account the way an
+    # administrator would before exercising the upload flow.
+    get_user_model().objects.filter(username="flowuser").update(can_upload_models=True)
 
     login = api_client.post(
         "/api/auth/login/",

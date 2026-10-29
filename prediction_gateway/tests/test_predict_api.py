@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 import requests
 from deployments.models import Deployment
@@ -41,7 +43,7 @@ def test_predict_returns_503_when_no_running_deployment(
 ):
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     res = auth_client.post(
         f"/api/predict/{model_obj.id}/",
@@ -62,18 +64,22 @@ def test_predict_success_creates_success_log(
     )
 
     class DummyRunner:
+        payloads = []
+
         def predict(self, payload):
+            self.payloads.append(payload)
             assert "instances" in payload
             return RunnerResult(status_code=200, data={"predictions": [1]})
 
+    runner = DummyRunner()
     monkeypatch.setattr(
         "prediction_gateway.views.RunnerFactory.get_runner",
-        lambda framework: DummyRunner(),
+        lambda framework: runner,
     )
 
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     res = auth_client.post(
         f"/api/predict/{model_obj.id}/",
@@ -86,6 +92,7 @@ def test_predict_success_creates_success_log(
     assert PredictionLog.objects.filter(
         model=model_obj, status="SUCCESS", deployment=dep
     ).exists()
+    assert runner.payloads[0]["model_id"] == str(model_version.id)
 
 
 def test_predict_connection_error_maps_502(
@@ -108,7 +115,7 @@ def test_predict_connection_error_maps_502(
 
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     res = auth_client.post(
         f"/api/predict/{model_obj.id}/",
@@ -140,7 +147,7 @@ def test_predict_timeout_maps_504(
 
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     res = auth_client.post(
         f"/api/predict/{model_obj.id}/",
@@ -175,7 +182,7 @@ def test_predict_uses_cache_for_repeated_input(
 
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     payload = {"instances": [{"x": 1}]}
     first = auth_client.post(f"/api/predict/{model_obj.id}/", payload, format="json")
@@ -221,7 +228,7 @@ def test_predict_client_error_passthrough_400(
 
     auth_client.credentials(
         HTTP_AUTHORIZATION=auth_client._credentials["HTTP_AUTHORIZATION"],
-        HTTP_X_API_KEY=api_key.key,
+        HTTP_X_API_KEY=api_key.raw_key,
     )
     res = auth_client.post(
         f"/api/predict/{model_obj.id}/",

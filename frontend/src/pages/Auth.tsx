@@ -20,17 +20,18 @@ export function Login() {
     try {
       const res = await api.post<any>('/auth/login/', { email, password });
       
-      // We don't get the username back from standard JWT token obtain pair view,
-      // but in a real scenario we'd decode the JWT or fetch user details.
-      // For this spec, we'll fetch dashboard summary to get the username.
-      localStorage.setItem('token', res.access); // Temporarily store to let api client work
+      localStorage.setItem('token', res.access);
+      if (res.refresh) {
+        localStorage.setItem('refreshToken', res.refresh);
+      }
       
       const dashboard = await api.get<any>('/dashboard/summary/');
-      setAuth(res.access, dashboard.username);
+      setAuth(res.access, dashboard.username, res.refresh);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Login failed');
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
     } finally {
       setLoading(false);
     }

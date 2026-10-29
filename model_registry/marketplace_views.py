@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.serializers import FiniteDecimalField
 from model_registry.models import Model
 
 User = get_user_model()
@@ -38,6 +39,16 @@ class ModelDetailSerializer(ModelCardSerializer):
 
     class Meta(ModelCardSerializer.Meta):
         fields = ModelCardSerializer.Meta.fields + ["readme_markdown"]
+
+
+class ModelUpdateSerializer(serializers.ModelSerializer):
+    """Owner edits to a public model. SEC-08: pricing is validated, not assigned raw."""
+
+    cost_per_run = FiniteDecimalField(max_digits=8, decimal_places=4, min_value=0)
+
+    class Meta:
+        model = Model
+        fields = ["description", "readme_markdown", "is_public", "cost_per_run"]
 
 
 class SmallPagination(PageNumberPagination):
@@ -75,7 +86,11 @@ class ExploreAPIView(APIView):
 
 
 class UserProfileAPIView(APIView):
-    """GET /api/users/@<username>/ — Public profile."""
+    """GET /api/users/@<username>/ — Public profile.
+
+    SEC-06: this endpoint is anonymous, so it must not disclose the account's
+    email address. Owners see their own address on the private dashboard.
+    """
 
     permission_classes = [AllowAny]
 
@@ -93,7 +108,6 @@ class UserProfileAPIView(APIView):
         return Response(
             {
                 "username": user.username,
-                "email": user.email,
                 "bio": user.bio,
                 "avatar_url": user.avatar_url,
                 "joined": user.created_at,
@@ -142,17 +156,9 @@ class ModelRepoAPIView(APIView):
         if request.user != model.owner:
             return Response({"detail": "You do not have permission to edit this model"}, status=status.HTTP_403_FORBIDDEN)
             
-        data = request.data
-        if "description" in data:
-            model.description = data["description"]
-        if "readme_markdown" in data:
-            model.readme_markdown = data["readme_markdown"]
-        if "is_public" in data:
-            model.is_public = data["is_public"]
-        if "cost_per_run" in data:
-            model.cost_per_run = data["cost_per_run"]
-            
-        model.save()
+        serializer = ModelUpdateSerializer(model, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(ModelDetailSerializer(model).data)
 
 

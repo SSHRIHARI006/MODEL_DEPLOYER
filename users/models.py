@@ -52,6 +52,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 
+    # SEC-03: uploading a model means handing this platform code to execute, so
+    # uploads are limited to staff and to accounts an administrator approves.
+    can_upload_models = models.BooleanField(
+        default=False,
+        help_text="Allow this account to upload models for deployment (invite-only policy).",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()

@@ -6,8 +6,8 @@ from .models import User
 class UserAdmin(BaseUserAdmin):
     model = User
 
-    list_display = ("email", "is_staff", "is_active")
-    list_filter = ("is_staff", "is_active")
+    list_display = ("email", "is_staff", "is_active", "can_upload_models")
+    list_filter = ("is_staff", "is_active", "can_upload_models")
 
     ordering = ("email",)
 
@@ -19,6 +19,7 @@ class UserAdmin(BaseUserAdmin):
                 "fields": (
                     "is_staff",
                     "is_active",
+                    "can_upload_models",
                     "is_superuser",
                     "groups",
                     "user_permissions",
@@ -32,7 +33,14 @@ class UserAdmin(BaseUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "password1", "password2", "is_staff", "is_active"),
+                "fields": (
+                    "email",
+                    "password1",
+                    "password2",
+                    "is_staff",
+                    "is_active",
+                    "can_upload_models",
+                ),
             },
         ),
     )

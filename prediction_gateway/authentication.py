@@ -1,4 +1,5 @@
 import hashlib
+from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -12,11 +13,14 @@ class UniversalOrJWTAuthentication(BaseAuthentication):
     If the token doesn't match the universal key format, it falls back to JWT.
     """
     def authenticate(self, request):
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return None
+        token = request.headers.get("X-API-Key")
+        if not token:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
 
-        token = auth_header.split(" ")[1]
+        if not token:
+            return None
 
         # Check if it looks like a Universal API Key
         if token.startswith("md_live_"):
@@ -36,9 +40,9 @@ class UniversalOrJWTAuthentication(BaseAuthentication):
             except UniversalAPIKey.DoesNotExist:
                 raise AuthenticationFailed("Invalid or inactive API Key")
 
-            # Optionally update last_used_at here, or via a background task
-            # key_obj.last_used_at = timezone.now()
-            # key_obj.save(update_fields=['last_used_at'])
+            # CODE-01: Record last_used_at when universal key is used
+            key_obj.last_used_at = timezone.now()
+            key_obj.save(update_fields=['last_used_at'])
 
             # Return the user and the token (DRF standard)
             return (key_obj.user, token)

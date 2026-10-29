@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.throttling import ConfigurableScopedRateThrottle
 from model_registry.models import Model
 from .models import APIKey, UniversalAPIKey
 from .serializers import APIKeyCreateSerializer, APIKeyListSerializer
@@ -11,6 +12,8 @@ from .serializers import APIKeyCreateSerializer, APIKeyListSerializer
 
 class APIKeyListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ConfigurableScopedRateThrottle]
+    throttle_scope = "keys"
 
     def get(self, request):
         keys = APIKey.objects.filter(user=request.user).order_by("-created_at")
@@ -37,7 +40,10 @@ class APIKeyListCreateAPIView(APIView):
                 "id": str(key.id),
                 "name": key.name,
                 "model_id": key.model_id,
-                "key": key.key,
+                "prefix": key.key_prefix,
+                # SEC-07: the only time the raw key is ever returned. Only its
+                # hash is stored, so it cannot be recovered later.
+                "key": key.raw_key,
                 "is_active": key.is_active,
                 "created_at": key.created_at,
             },
@@ -47,6 +53,8 @@ class APIKeyListCreateAPIView(APIView):
 
 class APIKeyDeactivateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ConfigurableScopedRateThrottle]
+    throttle_scope = "keys"
 
     def post(self, request, key_id):
         key = get_object_or_404(APIKey, id=key_id, user=request.user)
@@ -64,6 +72,8 @@ class UniversalKeyListCreateAPIView(APIView):
     """List and create user-level universal API keys."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ConfigurableScopedRateThrottle]
+    throttle_scope = "keys"
 
     def get(self, request):
         keys = UniversalAPIKey.objects.filter(user=request.user).order_by("-created_at")
@@ -107,6 +117,8 @@ class UniversalKeyDeleteAPIView(APIView):
     """Revoke a universal API key."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ConfigurableScopedRateThrottle]
+    throttle_scope = "keys"
 
     def delete(self, request, key_id):
         key = get_object_or_404(UniversalAPIKey, id=key_id, user=request.user)

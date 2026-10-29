@@ -64,17 +64,21 @@ def test_build_deployment_transitions_to_running(model_version, tmp_path):
 
     class Runner:
         base_url = "http://worker:8002"
+        init_payload = None
 
         def init_environment(self, payload):
+            self.init_payload = payload
             return RunnerResult(status_code=200, data={})
 
         def healthcheck(self):
             return RunnerResult(status_code=200, data={})
 
-    with patch("deployments.services.RunnerFactory.get_runner", return_value=Runner()):
+    runner = Runner()
+    with patch("deployments.services.RunnerFactory.get_runner", return_value=runner):
         result = build_deployment.apply(args=[str(deployment.id)]).get()
 
     deployment.refresh_from_db()
     assert result["status"] == "running"
     assert deployment.status == Deployment.Status.RUNNING
     assert deployment.internal_url == "http://worker:8002"
+    assert runner.init_payload["model_id"] == str(model_version.id)

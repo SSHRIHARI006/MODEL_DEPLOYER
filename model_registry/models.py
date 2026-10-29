@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 import uuid
 
@@ -25,6 +26,14 @@ class Model(models.Model):
 
     class Meta:
         unique_together = ("owner", "name")
+        constraints = [
+            # SEC-08: pricing is money-like, so the database refuses negative
+            # values even if a future code path forgets to validate.
+            models.CheckConstraint(
+                condition=Q(cost_per_run__gte=0),
+                name="model_cost_per_run_non_negative",
+            )
+        ]
 
     def __str__(self):
         return f"{self.owner.username}/{self.name}"
@@ -50,6 +59,14 @@ class ModelVersion(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["model", "version"],
+                name="unique_model_version",
+            )
+        ]
 
     def __str__(self):
         return f"{self.model.name} - {self.version}"

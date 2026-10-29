@@ -24,7 +24,11 @@ interface AppState {
   keys: UniversalKey[];
   theme: 'light' | 'dark';
 
-  setAuth: (token: string | null, username: string | null) => void;
+  setAuth: (
+    token: string | null,
+    username: string | null,
+    refreshToken?: string | null
+  ) => void;
   logout: () => void;
   fetchWallet: () => Promise<void>;
   fetchKeys: () => Promise<void>;
@@ -39,22 +43,27 @@ export const useStore = create<AppState>((set) => ({
   keys: [],
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
 
-  setAuth: (token, username) => {
+  setAuth: (token, username, refreshToken) => {
     if (token && username) {
       localStorage.setItem('token', token);
       localStorage.setItem('username', username);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
     }
     set({ token, username });
   },
 
-  toggleTheme: () => set((state) => {
-    const newTheme = state.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('theme', newTheme);
-    return { theme: newTheme };
-  }),
+  toggleTheme: () =>
+    set((state) => {
+      const newTheme = state.theme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', newTheme);
+      return { theme: newTheme };
+    }),
 
   logout: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('username');
     set({ token: null, username: null, wallet: null, keys: [] });
   },
@@ -63,13 +72,17 @@ export const useStore = create<AppState>((set) => ({
     try {
       const data = await api.get<{ wallet: WalletData }>('/wallet/');
       set({ wallet: data.wallet });
-    } catch { /* ignore if not logged in */ }
+    } catch {
+      /* ignore if not logged in */
+    }
   },
 
   fetchKeys: async () => {
     try {
       const data = await api.get<UniversalKey[]>('/keys/universal/');
       set({ keys: data });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   },
 }));
