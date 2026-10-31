@@ -86,6 +86,7 @@ htmlcov/
 storage/
 uploads/
 *.zip
+!frontend/public/modeldeploy-demo.zip
 
 # ------------------------------
 # Temporary files

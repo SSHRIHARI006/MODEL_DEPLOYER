@@ -3,6 +3,7 @@ import { Navbar } from '../components/Navbar';
 
 const sections = [
   { id: 'getting-started', label: 'Getting started' },
+  { id: 'demo-model', label: 'Try the demo model' },
   { id: 'model-package', label: 'Model package format' },
   { id: 'uploading', label: 'Uploading a model' },
   { id: 'deploying', label: 'Deploying' },
@@ -172,6 +173,58 @@ curl -X POST http://localhost:8000/api/auth/refresh/ \\
                 Send the access token as <code>Authorization: Bearer &lt;access&gt;</code> on every authenticated
                 request.
               </p>
+            </Section>
+
+            <Section id="demo-model" title="Try ModelDeploy with a Demo Model">
+              <div className="docs-demo-card">
+                <div>
+                  <span className="eyebrow">Guided first deployment</span>
+                  <h3 style={{ fontSize: 20, margin: '6px 0 8px' }}>A small, deterministic scikit-learn model</h3>
+                  <p style={{ marginBottom: 12, color: 'var(--color-text-muted)' }}>
+                    Download the curated demo bundle, upload it from your dashboard, and follow the normal
+                    deployment flow. The ZIP is 961 bytes and contains only <code>model.yaml</code>,
+                    <code>requirements.txt</code>, and <code>model.pkl</code>.
+                  </p>
+                  <a className="button button-primary" href="/modeldeploy-demo.zip" download="modeldeploy-demo.zip">
+                    Download modeldeploy-demo.zip
+                  </a>
+                </div>
+                <div className="docs-demo-meta">
+                  <strong>Demo contract</strong>
+                  <span>Framework: sklearn</span>
+                  <span>Task: regression</span>
+                  <span>Input: f1, f2, f3, f4</span>
+                  <span>Output: one numeric prediction</span>
+                </div>
+              </div>
+
+              <ol className="tutorial-steps">
+                <li><strong>Download the model.</strong> Save the ZIP without extracting or modifying it.</li>
+                <li><strong>Create an account.</strong> <a href="/register">Register here</a>, then sign in. Uploads remain approval-gated by default.</li>
+                <li><strong>Upload it.</strong> Open the dashboard, choose Model Repository, and upload <code>modeldeploy-demo.zip</code>.</li>
+                <li><strong>Deploy the returned version.</strong> Start a deployment for the new model version and wait until its status is <code>RUNNING</code>.</li>
+                <li><strong>Create an API key.</strong> Create a model-specific key from API Keys and copy it when shown; it is revealed only once.</li>
+                <li><strong>Make a prediction.</strong> The demo uses four tabular features. With a JWT and model API key, run:</li>
+              </ol>
+              <CodeBlock>{`curl -X POST http://localhost:8000/api/predict/MODEL_ID/ \\
+  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "X-API-Key: MODEL_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"instances":[{"f1":0.5,"f2":-0.3,"f3":1.2,"f4":0.7}]}'
+
+# Tested response shape:
+# {"predictions":[125.05094756692003],"probabilities":null,"metadata":{}}`}</CodeBlock>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+                Replace <code>MODEL_ID</code>, <code>ACCESS_TOKEN</code>, and <code>MODEL_API_KEY</code> with
+                values from your account. The exact prediction is deterministic for the bundled artifact and
+                scikit-learn 1.8.0.
+              </p>
+              <div className="troubleshooting-note">
+                <strong>Troubleshooting:</strong> invalid ZIP errors usually mean the archive was re-packed with
+                nested folders; <code>FAILED</code> deployments expose an owner-only error in the deployment
+                detail; <code>401</code> means the JWT or API key is missing; <code>503</code> means the model is
+                not ready yet; and a timeout usually indicates the worker is still preparing the environment.
+              </div>
             </Section>
 
             <Section id="model-package" title="Model package format">

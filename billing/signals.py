@@ -7,7 +7,7 @@ from .models import Wallet
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_wallet(sender, instance, created, **kwargs):
-    if not created or not settings.BILLING_ENABLED:
+    if not created:
         return
 
     Wallet.objects.get_or_create(

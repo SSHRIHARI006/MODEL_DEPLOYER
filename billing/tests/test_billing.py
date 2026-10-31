@@ -85,10 +85,11 @@ def test_starting_credits_configurable(api_client):
 
 
 @override_settings(BILLING_ENABLED=False)
-def test_no_wallet_created_when_billing_disabled(api_client):
+def test_registration_grants_starting_credits_when_billing_disabled(api_client):
     res = register(api_client, "fresh")
     assert res.status_code == 201
-    assert not Wallet.objects.filter(user__username="fresh").exists()
+    wallet = Wallet.objects.get(user__username="fresh")
+    assert wallet.credit_balance == Decimal("100")
 
 
 def test_inference_charges_consumer_and_credits_creator(

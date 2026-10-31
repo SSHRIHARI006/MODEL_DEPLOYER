@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useStore } from './store';
 import { Explore } from './pages/Explore';
+import { Landing } from './pages/Landing';
 import { UserProfile } from './pages/UserProfile';
 import { ModelRepo } from './pages/ModelRepo';
 import { Dashboard } from './pages/Dashboard';
@@ -36,7 +37,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public Directory */}
-        <Route path="/" element={<Explore />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/explore" element={<Explore />} />
         
         {/* Auth */}
         <Route path="/login" element={<Login />} />

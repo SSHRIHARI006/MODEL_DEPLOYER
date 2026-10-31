@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import include, path
 
 from model_registry.marketplace_views import (
@@ -36,3 +38,7 @@ urlpatterns = [
     path("api/metrics/", include("monitoring.urls")),
     path("api/", include("billing.urls")),
 ]
+
+# The API container is also the source for Django admin/static assets. The
+# reverse proxy keeps this path private to the application host in production.
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

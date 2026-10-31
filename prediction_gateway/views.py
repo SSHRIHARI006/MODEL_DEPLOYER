@@ -46,8 +46,15 @@ def prediction_cache_key(model_id, model_version_id, instances):
 def _debit_credits(consumer, creator, model, amount: Decimal, description: str):
     """BILL-01: Atomically debits consumer and credits creator, ordering locks by pk to prevent deadlocks."""
     with transaction.atomic():
-        c_w, _ = Wallet.objects.get_or_create(user=consumer)
-        m_w, _ = Wallet.objects.get_or_create(user=creator)
+        starting_credits = settings.BILLING_STARTING_CREDITS
+        c_w, _ = Wallet.objects.get_or_create(
+            user=consumer,
+            defaults={"credit_balance": starting_credits},
+        )
+        m_w, _ = Wallet.objects.get_or_create(
+            user=creator,
+            defaults={"credit_balance": starting_credits},
+        )
         # Lock in deterministic PK order to eliminate deadlocks
         locked = {
             w.pk: w

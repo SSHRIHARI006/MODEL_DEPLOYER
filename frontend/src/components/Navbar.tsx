@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import { Box, Search, LogOut, LayoutDashboard, Moon, Sun, Book } from 'lucide-react';
 import { useState } from 'react';
 
-export function Navbar() {
+export function Navbar({ publicNav = false }: { publicNav?: boolean }) {
   const { token, username, logout, theme, toggleTheme } = useStore();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -24,6 +24,7 @@ export function Navbar() {
       }}
     >
       <div
+        className="nav-container"
         style={{
           maxWidth: 1280,
           margin: '0 auto',
@@ -37,12 +38,12 @@ export function Navbar() {
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
           <Box size={22} color="var(--color-text)" />
           <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-text)' }}>
-            Model Deployer
+            ModelDeploy
           </span>
         </Link>
 
         {/* Search */}
-        <form onSubmit={handleSearch} style={{ flex: 1, maxWidth: 540 }}>
+        <form className="nav-search" onSubmit={handleSearch} style={{ flex: 1, maxWidth: 540 }}>
           <div
             style={{
               display: 'flex',
@@ -72,11 +73,15 @@ export function Navbar() {
         </form>
 
         {/* Right nav */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={toggleTheme} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+        <nav className="nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button className="theme-toggle" onClick={toggleTheme} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             {theme === 'dark' ? <Sun size={18} color="var(--color-text-muted)" /> : <Moon size={18} color="var(--color-text-muted)" />}
           </button>
 
+          {publicNav && <>
+            <Link className="public-nav-link" to="/" style={{ fontSize: 14, color: 'var(--color-text)', textDecoration: 'none' }}>Home</Link>
+            <a className="public-nav-link" href="#features" style={{ fontSize: 14, color: 'var(--color-text)', textDecoration: 'none' }}>Features</a>
+          </>}
           <Link
             to="/docs"
             style={{

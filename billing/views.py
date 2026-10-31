@@ -49,7 +49,10 @@ class WalletAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        wallet, _ = Wallet.objects.get_or_create(
+            user=request.user,
+            defaults={"credit_balance": settings.BILLING_STARTING_CREDITS},
+        )
         transactions = LedgerTransaction.objects.filter(
             consumer=request.user
         ) | LedgerTransaction.objects.filter(creator=request.user)
@@ -120,7 +123,8 @@ class DepositCreditsAPIView(APIView):
 
         with transaction.atomic():
             wallet, _ = Wallet.objects.select_for_update().get_or_create(
-                user=request.user
+                user=request.user,
+                defaults={"credit_balance": settings.BILLING_STARTING_CREDITS},
             )
             wallet.credit_balance += amount
             wallet.save(update_fields=["credit_balance", "updated_at"])

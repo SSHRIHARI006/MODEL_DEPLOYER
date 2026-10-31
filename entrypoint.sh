@@ -27,4 +27,6 @@ PY
   python manage.py migrate --noinput
 fi
 
+python manage.py collectstatic --noinput
+
 exec "$@"
