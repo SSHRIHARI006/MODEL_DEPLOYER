@@ -42,6 +42,6 @@ trap 'rm -rf "$tmpdir"' EXIT
 echo "[INFO] Restoring Postgres dump to ${DB_NAME}..."
 pg_restore -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" --clean --if-exists "$BACKUP_DIR/postgres.dump"
 
-.venv/bin/python scripts/restore_helpers.py upload "$tmpdir/objects" "${AWS_STORAGE_BUCKET_NAME:-models}"
+.venv/bin/python scripts/restore_helpers.py upload "$tmpdir/objects" "${MINIO_BUCKET:-${AWS_STORAGE_BUCKET_NAME:-models}}"
 
 echo "[SUCCESS] Database and object storage restore completed for ${DB_NAME}"

@@ -210,10 +210,10 @@ def main() -> None:
 
         s3 = boto3.client(
             "s3",
-            endpoint_url=os.environ.get("AWS_S3_ENDPOINT_URL", "http://localhost:9000"),
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-            use_ssl=os.environ.get("AWS_S3_USE_SSL", "false").lower() == "true",
+            endpoint_url=os.environ.get("MINIO_ENDPOINT") or os.environ.get("AWS_S3_ENDPOINT_URL", "http://localhost:9000"),
+            aws_access_key_id=os.environ.get("MINIO_ROOT_USER") or os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.environ.get("MINIO_ROOT_PASSWORD") or os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            use_ssl=(os.environ.get("MINIO_USE_SSL") or os.environ.get("AWS_S3_USE_SSL", "false")).lower() == "true",
             config=Config(s3={"addressing_style": "path"}, connect_timeout=3, retries={"max_attempts": 1}),
         )
         try:

@@ -164,6 +164,8 @@ The same `docker-compose.yml` runs locally and in production; only `.env` differ
    - `DJANGO_SECRET_KEY` — generate with `python -c "import secrets; print(secrets.token_urlsafe(50))"`
    - `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS=modeldeployer.shrihari.dev`
    - `DJANGO_CORS_ALLOWED_ORIGINS=https://modeldeployer.shrihari.dev`
+   - `DJANGO_SECURE_SSL_REDIRECT=true`, `DJANGO_SECURE_COOKIES=true`, and
+     `DJANGO_CSRF_TRUSTED_ORIGINS=https://modeldeployer.shrihari.dev`
    - `BILLING_ENABLED=true` only if you want to meter inference
    - strong `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
    - a strong `REDIS_PASSWORD` (compose refuses to start without it), repeated in `REDIS_URL` and
@@ -191,7 +193,9 @@ The same `docker-compose.yml` runs locally and in production; only `.env` differ
 
 ### Updating a deployment
 
-Back up data and object storage first using the automated backup tool:
+Back up data and object storage first using the automated backup tool. It reads
+the current `POSTGRES_*` and `MINIO_*` settings (legacy `AWS_*` names remain
+fallbacks):
 
 ```sh
 ./scripts/backup.sh ./backups/$(date +%Y%m%d_%H%M%S)

@@ -91,7 +91,10 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "set -eu;
-      mc alias set local \"$$MINIO_ENDPOINT\" \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\";
+      for ((attempt=1; attempt<=30; attempt++)); do
+      if mc alias set local \"$$MINIO_ENDPOINT\" \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; then break; fi;
+      if [ \"$$attempt\" -eq 30 ]; then exit 1; fi; sleep 2;
+      done;
       mc mb --ignore-existing \"local/$$MINIO_BUCKET\";
       read -r -d '' policy < /policies/worker-artifacts-readonly.json || true;
       printf '%s' \"$${policy//__ARTIFACTS_BUCKET__/$$MINIO_BUCKET}\" > /tmp/worker-policy.json;

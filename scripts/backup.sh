@@ -36,11 +36,11 @@ from restore_helpers import create_manifest, validate_manifest, validate_storage
 
 backup_dir = Path(sys.argv[1])
 database = sys.argv[2]
-endpoint = os.environ.get("AWS_S3_ENDPOINT_URL", "http://localhost:9000")
-key_id = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
-bucket = os.environ.get("AWS_STORAGE_BUCKET_NAME", "models")
-use_ssl = os.environ.get("AWS_S3_USE_SSL", "false").lower() == "true"
+endpoint = os.environ.get("MINIO_ENDPOINT") or os.environ.get("AWS_S3_ENDPOINT_URL", "http://localhost:9000")
+key_id = os.environ.get("MINIO_ROOT_USER") or os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+secret = os.environ.get("MINIO_ROOT_PASSWORD") or os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+bucket = os.environ.get("MINIO_BUCKET") or os.environ.get("AWS_STORAGE_BUCKET_NAME", "models")
+use_ssl = (os.environ.get("MINIO_USE_SSL") or os.environ.get("AWS_S3_USE_SSL", "false")).lower() == "true"
 s3 = boto3.client(
     "s3",
     endpoint_url=endpoint,
