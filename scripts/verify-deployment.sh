@@ -67,7 +67,9 @@ from django.conf import settings
 
 django.setup()
 host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else "localhost"
-response = requests.get(
+session = requests.Session()
+session.trust_env = False
+response = session.get(
     "http://127.0.0.1:8000/api/metrics/ready/",
     headers={"Host": host},
     timeout=10,
