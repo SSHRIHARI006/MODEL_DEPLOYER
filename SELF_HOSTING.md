@@ -182,6 +182,11 @@ The same `docker-compose.yml` runs locally and in production; only `.env` differ
    ```
 
    `api` and `frontend` bind to `127.0.0.1` only; everything else is internal to the Compose network.
+   Verify the generated environment and live dependencies without exposing credentials:
+
+   ```sh
+   ./scripts/verify-deployment.sh --production
+   ```
 5. Put Caddy (or another proxy) in front. Keep `FRONTEND_PORT=8080` so the
    frontend does not compete with Caddy for host port 80. Copy
    `deploy/Caddyfile.example` into Caddy's configuration; it terminates TLS and
