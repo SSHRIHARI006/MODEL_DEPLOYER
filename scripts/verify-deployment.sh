@@ -66,7 +66,12 @@ import django
 from django.conf import settings
 
 django.setup()
-response = requests.get("http://127.0.0.1:8000/api/metrics/ready/", timeout=10)
+host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else "localhost"
+response = requests.get(
+    "http://127.0.0.1:8000/api/metrics/ready/",
+    headers={"Host": host},
+    timeout=10,
+)
 print(f"API readiness: HTTP {response.status_code}")
 print(response.text)
 if response.status_code != 200:
