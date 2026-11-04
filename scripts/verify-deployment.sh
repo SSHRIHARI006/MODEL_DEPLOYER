@@ -71,7 +71,7 @@ session = requests.Session()
 session.trust_env = False
 response = session.get(
     "http://127.0.0.1:8000/api/metrics/ready/",
-    headers={"Host": host},
+    headers={"Host": host, "X-Forwarded-Proto": "https"},
     timeout=10,
 )
 print(f"API readiness: HTTP {response.status_code}")
